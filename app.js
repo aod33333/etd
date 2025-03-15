@@ -1031,7 +1031,14 @@ app.use((req, res, next) => {
 });
 
 // Start the server
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
   console.log(`Access the application at http://localhost:${port}`);
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`Port ${port} is already in use`);
+    process.exit(1);
+  } else {
+    console.error('Server error:', err);
+  }
 });
