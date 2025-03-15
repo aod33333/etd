@@ -1,7 +1,7 @@
 {
   "name": "educational-token-display",
   "version": "1.0.0",
-  "description": "Educational token display system that shows STBL as USDT with real USD value",
+  "description": "Token display system that shows STBL as USDT with real USD value",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
