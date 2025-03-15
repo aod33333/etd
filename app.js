@@ -137,14 +137,6 @@ app.get('/api/token-balance/:address', async (req, res) => {
   }
 });
 
-// [Continuing with the full implementation from previous versions...]
-
-// Start the server
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-  console.log(`Access the application at http://localhost:${port}`);
-});
-
 // Continue CoinGecko API interception and additional routes
 // Primary CoinGecko endpoint for simple price (most commonly used)
 app.get('/api/v3/simple/price', (req, res) => {
