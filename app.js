@@ -1064,3 +1064,31 @@ app.get('/metamask-redirect', (req, res) => {
   `;
   
   res.send(html);
+
+  // Direct MetaMask deep link endpoint
+app.get('/api/add-token-mobile', (req, res) => {
+  // Generate a WalletConnect-compatible deep link for MetaMask mobile
+  const deepLink = `https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect`;
+  res.redirect(deepLink);
+});
+
+// Root route - detect mobile and redirect accordingly
+app.get('/', (req, res) => {
+  // Check if user is on mobile
+  const userAgent = req.headers['user-agent'] || '';
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(userAgent);
+  
+  if (isMobile) {
+    // Mobile users go to mobile-optimized page
+    res.redirect('/mobile/add-token');
+  } else {
+    // Desktop users get the standard page
+    res.sendFile(path.join(__dirname, 'index.html'));
+  }
+});
+
+// Start the server
+server.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  console.log(`Access the application at http://localhost:${port}`);
+});
