@@ -1031,7 +1031,7 @@ app.use((req, res, next) => {
 });
 
 // Start the server
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Access the application at http://localhost:${port}`);
 });
