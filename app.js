@@ -11,7 +11,7 @@ const fs = require('fs');
 // Create Express application
 const app = express();
 const server = http.createServer(app);
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 1000;
 
 // Token configuration - UPDATE THIS with your token details
 const TOKEN_CONFIG = {
