@@ -1051,14 +1051,84 @@ app.get('/metamask-redirect', (req, res) => {
     };
     
     // Function to add token to MetaMask
-    async function addTokenToMetaMask() {
-      try {
-        // If already have ethereum object
-        if (window.ethereum) {
-          // Request account access
-          const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
+   async function addTokenToMetaMask() {
+  try {
+    // If already have ethereum object
+    if (window.ethereum) {
+      // Request account access
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      });
+      
+      // Check current chain
+      const chainId = await window.ethereum.request({ 
+        method: 'eth_chainId' 
+      });
+      
+      // If not on Base network, add/switch to it
+      if (chainId !== '${TOKEN_CONFIG.networkId}') {
+        try {
+          // Try to switch to Base
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '${TOKEN_CONFIG.networkId}' }]
           });
-          
-          // Check current chain
-          const chainId = await window.
+        } catch (switchError) {
+          // If Base network not added yet, add it
+          if (switchError.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '${TOKEN_CONFIG.networkId}',
+                chainName: '${TOKEN_CONFIG.networkName}',
+                nativeCurrency: {
+                  name: 'Ethereum',
+                  symbol: 'ETH',
+                  decimals: 18
+                },
+                rpcUrls: ['${TOKEN_CONFIG.rpcUrl}'],
+                blockExplorerUrls: ['${TOKEN_CONFIG.blockExplorerUrl}']
+              }]
+            });
+          } else {
+            throw switchError;
+          }
+        }
+      }
+      
+      // Add the token
+      const wasAdded = await window.ethereum.request({
+        method: 'wallet_watchAsset',
+        params: {
+          type: 'ERC20',
+          options: {
+            address: '${TOKEN_CONFIG.address}',
+            symbol: '${TOKEN_CONFIG.symbol}',
+            decimals: ${TOKEN_CONFIG.decimals},
+            image: '${TOKEN_CONFIG.image}'
+          }
+        }
+      });
+      
+      if (wasAdded) {
+        // Success - redirect back to success page
+        window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+      } else {
+        // User rejected - go back to add token page
+        window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token';
+      }
+    } else {
+      // No ethereum object - try deep link again
+      window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/mobile/add-token';
+    }
+  } catch (error) {
+    console.error('Error adding token:', error);
+    // Redirect back to add token page with error param
+    window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token?error=' + encodeURIComponent(error.message);
+  }
+}
+
+// Try to add token after a short delay to let the overrides initialize
+setTimeout(() => {
+  addTokenToMetaMask();
+}, 500);
