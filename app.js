@@ -1064,6 +1064,7 @@ app.get('/metamask-redirect', (req, res) => {
   `;
   
   res.send(html);
+  });
 
   // Direct MetaMask deep link endpoint
 app.get('/api/add-token-mobile', (req, res) => {
