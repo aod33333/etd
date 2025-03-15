@@ -894,7 +894,6 @@ app.get('/mobile/success', (req, res) => {
   
   res.send(html);
 });
-});
 
 // MetaMask redirect handler (with JS to inject CoinGecko interception)
 app.get('/metamask-redirect', (req, res) => {
