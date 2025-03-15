@@ -325,13 +325,11 @@
             return originalFetch(resource, init);
           };
           
-          // Create a timeout promise
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Request timed out after 15 seconds')), 15000)
-          );
+          console.log("Adding token to MetaMask:", tokenConfig); // Debug logging
           
-          // Add token with minimal permissions - no account access needed
-          const addTokenPromise = window.ethereum.request({
+          // Add token with minimal permissions - no account access needed 
+          // No timeout promise race - let MetaMask take its time
+          const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
               type: 'ERC20',
@@ -344,10 +342,7 @@
             }
           });
           
-          // Race the add token request against the timeout
-          const wasAdded = await Promise.race([addTokenPromise, timeoutPromise]);
-          
-          // ALWAYS hide loading overlay immediately after
+          // ALWAYS hide loading overlay immediately after response received
           loadingOverlay.style.display = 'none';
           
           // Show success modal if added
@@ -355,16 +350,14 @@
             // Try to get account access to update balance, but this is optional
             try {
               const accounts = await window.ethereum.request({ 
-                method: 'eth_requestAccounts',
-                timeout: 5000 // 5 second timeout
+                method: 'eth_accounts' // Just get already connected accounts, don't prompt
               });
               
               if (accounts && accounts.length > 0) {
                 await fetchTokenBalance(accounts[0]);
               }
             } catch (accountError) {
-              // If user declines account access, that's fine - just show success
-              console.log('Optional account access declined or failed:', accountError);
+              console.log('Optional account access failed:', accountError);
             }
             
             successModal.show();
@@ -373,17 +366,16 @@
           // ALWAYS hide loading overlay if there's an error
           loadingOverlay.style.display = 'none';
           
+          // Better error handling with console details
+          console.error('Error adding token:', error);
+          console.log('Error code:', error.code);
+          console.log('Error message:', error.message);
+          
           // Don't show alert if user rejected - MetaMask already shows a message
           if (error.code !== 4001) {
-            console.error('Error adding token:', error);
             alert('Error adding token: ' + error.message);
           }
         }
-      });
-      
-      // Ensure loading overlay is never stuck by hiding it on page load
-      window.addEventListener('load', () => {
-        loadingOverlay.style.display = 'none';
       });
       
       // Function to fetch token balance with fixed decimals
@@ -450,6 +442,14 @@
           // Reload the page on chain change
           window.location.reload();
         });
+      }
+    });
+    
+    // Add this safety measure to ensure loading overlay is never stuck
+    window.addEventListener('load', () => {
+      const loadingOverlay = document.getElementById('loadingOverlay');
+      if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
       }
     });
   </script>
