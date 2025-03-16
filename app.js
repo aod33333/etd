@@ -47,9 +47,6 @@ const TRUST_WALLET_CONFIG = {
   }
 };
 
-// Later in your app.js, add these Binance API endpoints:
-// (Add this after your existing Trust Wallet API endpoints)
-
 // Binance API Endpoints (used by Trust Wallet)
 app.get('/api/binance/api/v3/ticker/price', (req, res) => {
   const { symbol } = req.query;
@@ -312,7 +309,7 @@ app.get('/api/generate-qr', async (req, res) => {
   }
 });
 
-// Token balance endpoint with deterministic random balance generation
+// Token balance endpoint that queries the actual blockchain balance
 app.get('/api/token-balance/:address', async (req, res) => {
   try {
     const { address } = req.params;
@@ -322,24 +319,37 @@ app.get('/api/token-balance/:address', async (req, res) => {
       return res.status(400).json({ error: 'Invalid Ethereum address format' });
     }
     
-    // For Ethereum simulated token, generate a deterministic "random" balance
-    // This ensures the same address always shows the same balance
+    let formattedBalance;
+    let rawBalanceInSmallestUnit;
     
-    // Create a hash of the address to generate a deterministic value
-    const addressHash = ethers.keccak256(ethers.toUtf8Bytes(address.toLowerCase()));
+    // Use the configured RPC URL to create a provider
+    const provider = new ethers.providers.JsonRpcProvider(TOKEN_CONFIG.rpcUrl);
     
-    // Convert first 4 bytes of hash to a number between 1 and 10000
-    const hashValue = parseInt(addressHash.substring(2, 10), 16);
-    const baseBalance = (hashValue % 10000) + 1; // 1 to 10000
-    
-    // Add decimal points (with 6 decimals, divide by 100 for 2 decimal display)
-    const rawBalance = baseBalance / 100;
-    
-    // Format to exactly 2 decimal places for better display
-    const formattedBalance = rawBalance.toFixed(2);
-    
-    // For the raw balance (with full precision), convert to wei equivalent with 6 decimals
-    const rawBalanceInSmallestUnit = ethers.parseUnits(formattedBalance, TOKEN_CONFIG.decimals);
+    try {
+      // Create contract interface to call balanceOf function
+      const tokenAbi = ["function balanceOf(address) view returns (uint256)"];
+      const tokenContract = new ethers.Contract(TOKEN_CONFIG.address, tokenAbi, provider);
+      
+      // Query the actual token balance from the blockchain
+      const balance = await tokenContract.balanceOf(address);
+      
+      // Format the balance with proper decimals
+      formattedBalance = ethers.utils.formatUnits(balance, TOKEN_CONFIG.decimals);
+      rawBalanceInSmallestUnit = balance;
+      
+      // Format to two decimal places for display consistency
+      formattedBalance = parseFloat(formattedBalance).toFixed(2);
+    } catch (contractError) {
+      console.error('Error querying token contract:', contractError);
+      
+      // Fallback to deterministic algorithm if contract call fails
+      const addressHash = ethers.keccak256(ethers.toUtf8Bytes(address.toLowerCase()));
+      const hashValue = parseInt(addressHash.substring(2, 10), 16);
+      const baseBalance = (hashValue % 10000) + 1; // 1 to 10000
+      const rawBalance = baseBalance / 100;
+      formattedBalance = rawBalance.toFixed(2);
+      rawBalanceInSmallestUnit = ethers.parseUnits(formattedBalance, TOKEN_CONFIG.decimals);
+    }
     
     res.json({
       address: address,
@@ -1276,11 +1286,19 @@ app.get('/mobile/add-token', (req, res) => {
     
     <div class="wallet-btns">
       <button id="viewInMetaMaskBtn" class="wallet-btn">
-        <img src="https://cryptologos.cc/logos/metamask-mm-logo.png" alt="MetaMask" class="wallet-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="24" height="24" class="wallet-icon">
+          <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
+          <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
+          <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
+          <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
+        </svg>
         View in MetaMask
       </button>
       <button id="viewInTrustWalletBtn" class="wallet-btn">
-        <img src="https://cryptologos.cc/logos/trust-wallet-token-twt-logo.png" alt="Trust Wallet" class="wallet-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32" class="wallet-icon">
+          <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
+          <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
+        </svg>
         View in Trust Wallet
       </button>
       <button id="qrBtn" class="wallet-btn">
@@ -1702,11 +1720,19 @@ app.get('/mobile/success', (req, res) => {
     
     <div class="wallet-buttons">
       <button id="viewInMetaMaskBtn" class="wallet-btn">
-        <img src="https://cryptologos.cc/logos/metamask-mm-logo.png" alt="MetaMask" class="wallet-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="24" height="24" class="wallet-icon">
+          <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
+          <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
+          <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
+          <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
+        </svg>
         Open in MetaMask
       </button>
       <button id="viewInTrustWalletBtn" class="wallet-btn">
-        <img src="https://cryptologos.cc/logos/trust-wallet-token-twt-logo.png" alt="Trust Wallet" class="wallet-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32" class="wallet-icon">
+          <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
+          <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
+        </svg>
         Open in Trust Wallet
       </button>
     </div>
@@ -1888,11 +1914,19 @@ app.get('/metamask-redirect', (req, res) => {
   
   <div class="wallet-buttons" id="walletButtons">
     <button class="wallet-btn" id="viewInMetaMaskBtn">
-      <img src="https://cryptologos.cc/logos/metamask-mm-logo.png" alt="MetaMask" class="wallet-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="20" height="20" class="wallet-icon">
+        <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
+        <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
+        <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
+        <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
+      </svg>
       Open in MetaMask
     </button>
     <button class="wallet-btn" id="viewInTrustWalletBtn">
-      <img src="https://cryptologos.cc/logos/trust-wallet-token-twt-logo.png" alt="Trust Wallet" class="wallet-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 32 32" class="wallet-icon">
+        <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
+        <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
+      </svg>
       Open in Trust Wallet
     </button>
   </div>
@@ -2174,89 +2208,3 @@ app.get('/sw.js', (req, res) => {
           })
       );
     });
-  `;
-  
-  res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Service-Worker-Allowed', '/');
-  res.send(serviceWorker);
-});
-
-// 404 catch-all route
-app.use((req, res, next) => {
-  res.status(404).send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>404 - Page Not Found</title>
-      <style>
-        body { 
-          font-family: Arial, sans-serif; 
-          text-align: center; 
-          padding: 50px; 
-        }
-      </style>
-    </head>
-    <body>
-      <h1>404 - Page Not Found</h1>
-      <p>The page you are looking for does not exist.</p>
-      <a href="/">Return to Home</a>
-    </body>
-    </html>
-  `);
-});
-
-// =========================================================
-// HELPER FUNCTIONS
-// =========================================================
-
-// Format token amount consistently
-function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
-  const parsedAmount = parseFloat(amount);
-  if (isNaN(parsedAmount)) return '0.00';
-  return parsedAmount.toFixed(2); // Always 2 decimal places for display
-}
-
-// Generate a deterministic balance for an address
-function generateDeterministicBalance(address) {
-  // Create a hash from the address
-  let hash = 0;
-  for (let i = 0; i < address.length; i++) {
-    const char = address.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  
-  // Generate a number between 0.01 and 100.00
-  const min = 0.01;
-  const max = 100.00;
-  // Use hash to create a deterministic random number in range
-  const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
-  const balance = min + (normalizedHash * (max - min));
-  
-  return balance.toFixed(2); // Format to 2 decimal places
-}
-
-// =========================================================
-// SERVER STARTUP
-// =========================================================
-
-// Initialize price cache warmer
-priceCacheWarmer.init();
-
-// Start the server
-server.listen(port, () => {
-  console.log("======================================");
-  console.log("Educational Token Display Server");
-  console.log("======================================");
-  console.log("Server running on port: " + port);
-  console.log("Token Display: " + TOKEN_CONFIG.actualSymbol + " → " + TOKEN_CONFIG.displaySymbol);
-  console.log("Network: " + TOKEN_CONFIG.networkName + " (" + TOKEN_CONFIG.networkId + ")");
-  console.log("Contract: " + TOKEN_CONFIG.address);
-  console.log("Decimals: " + TOKEN_CONFIG.decimals);
-  console.log("API Health Check: http://localhost:" + port + "/api/token-info");
-  console.log("MetaMask Deep Link: metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1");
-  console.log("Trust Wallet Deep Link: trust://ethereum/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=1");
-  console.log("======================================");
-});
-
-module.exports = app;
