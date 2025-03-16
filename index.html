@@ -504,14 +504,14 @@
           throw new Error("MetaMask not detected");
         }
         
-        debugLog(`Calling MetaMask: ${method}`);
+        debugLog("Calling MetaMask: " + method);
         try {
           return await window.ethereum.request({
             method: method,
             params: params || []
           });
         } catch (error) {
-          debugLog(`MetaMask Error (${method}): ${error.message}`);
+          debugLog("MetaMask Error (" + method + "): " + error.message);
           // Return the error for handling instead of throwing
           return { error: error };
         }
@@ -547,7 +547,7 @@
           // Check if on correct network first
           debugLog("Checking Base network compatibility...");
           const chainId = await safeMetaMaskCall('eth_chainId');
-          debugLog(`Current chain ID: ${chainId}, Target: ${tokenConfig.networkId}`);
+          debugLog("Current chain ID: " + chainId + ", Target: " + tokenConfig.networkId);
           
           if (chainId !== tokenConfig.networkId) {
             loadingText.textContent = "Preparing to switch to Base network...";
@@ -588,7 +588,7 @@
                     // User rejected
                     throw new Error("User rejected network addition");
                   } else {
-                    debugLog(`Error adding network: ${addResult.error.message}`);
+                    debugLog("Error adding network: " + addResult.error.message);
                   }
                 }
               } else if (switchResult.error.message && 
@@ -599,7 +599,7 @@
                 // User rejected
                 throw new Error("User rejected network switch");
               } else {
-                debugLog(`Network switch error: ${switchResult.error.message}`);
+                debugLog("Network switch error: " + switchResult.error.message);
               }
             }
           } else {
@@ -628,7 +628,7 @@
             if (tokenResult.error.code === 4001) {
               debugLog("User rejected token addition");
             } else {
-              throw new Error(`Token addition error: ${tokenResult.error.message}`);
+              throw new Error("Token addition error: " + tokenResult.error.message);
             }
           } else {
             debugLog("Token added successfully");
@@ -651,7 +651,7 @@
                 await fetchTokenBalance(accounts[0]);
               }
             } catch (balanceError) {
-              debugLog(`Error fetching balance: ${balanceError.message}`);
+              debugLog("Error fetching balance: " + balanceError.message);
             }
           }
         } catch (error) {
@@ -659,11 +659,11 @@
           hideLoading(timeoutId);
           
           // Log the error
-          debugLog(`Error: ${error.message}`);
+          debugLog("Error: " + error.message);
           
           // Don't show alert for user rejections
           if (error.code !== 4001) {
-            alert(`Error adding token: ${error.message}`);
+            alert("Error adding token: " + error.message);
           }
           
           // Show alternative method button
@@ -697,7 +697,7 @@
             if (tokenResult.error.code === 4001) {
               debugLog("User rejected alternative token addition");
             } else {
-              throw new Error(`Alternative method error: ${tokenResult.error.message}`);
+              throw new Error("Alternative method error: " + tokenResult.error.message);
             }
           } else {
             debugLog("Token added successfully with alternative method");
@@ -719,7 +719,7 @@
                 await fetchTokenBalance(accounts[0]);
               }
             } catch (balanceError) {
-              debugLog(`Error fetching balance: ${balanceError.message}`);
+              debugLog("Error fetching balance: " + balanceError.message);
             }
           }
         } catch (error) {
@@ -727,11 +727,11 @@
           hideLoading(timeoutId);
           
           // Log error
-          debugLog(`Alternative method error: ${error.message}`);
+          debugLog("Alternative method error: " + error.message);
           
           // Don't alert for user rejection
           if (error.code !== 4001) {
-            alert(`Error adding token: ${error.message}`);
+            alert("Error adding token: " + error.message);
           }
         }
       });
@@ -739,21 +739,21 @@
       // Function to fetch token balance from our API
       async function fetchTokenBalance(account) {
         try {
-          debugLog(`Fetching balance for ${account}`);
-          const balanceResponse = await fetch(`/api/token-balance/${account}`);
+          debugLog("Fetching balance for " + account);
+          const balanceResponse = await fetch("/api/token-balance/" + account);
           const balanceData = await balanceResponse.json();
           
           if (balanceData.formattedBalance) {
             // Update balance display with proper formatting as USDT
-            tokenBalance.textContent = `${balanceData.formattedBalance} USDT`;
+            tokenBalance.textContent = balanceData.formattedBalance + " USDT";
             
             // Show USD value (1:1 as it's a stablecoin)
-            tokenValue.textContent = `$${balanceData.formattedBalance}`;
+            tokenValue.textContent = "$" + balanceData.formattedBalance;
             
-            debugLog(`Updated balance: ${balanceData.formattedBalance} USDT`);
+            debugLog("Updated balance: " + balanceData.formattedBalance + " USDT");
           }
         } catch (error) {
-          debugLog(`Error fetching token balance: ${error.message}`);
+          debugLog("Error fetching token balance: " + error.message);
         }
       }
       
@@ -762,11 +762,11 @@
         try {
           const accounts = await safeMetaMaskCall('eth_accounts');
           if (accounts && accounts.length > 0) {
-            debugLog(`Connected account: ${accounts[0]}`);
+            debugLog("Connected account: " + accounts[0]);
             await fetchTokenBalance(accounts[0]);
           }
         } catch (error) {
-          debugLog(`Error checking wallet: ${error.message}`);
+          debugLog("Error checking wallet: " + error.message);
         }
         
         // Listen for account changes
