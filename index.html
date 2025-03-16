@@ -444,7 +444,7 @@
       if (debugConsole) {
         // Create log entry
         const entry = document.createElement('div');
-        entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+        entry.textContent = new Date().toLocaleTimeString() + ": " + message;
         debugConsole.appendChild(entry);
         debugConsole.scrollTop = debugConsole.scrollHeight;
         
