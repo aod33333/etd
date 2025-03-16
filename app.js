@@ -2200,7 +2200,7 @@ app.get('/sw.js', (req, res) => {
         return;
       }
 
-      // Regular fetch handling with network-first strategy
+     // Regular fetch handling with network-first strategy
       event.respondWith(
         fetch(event.request)
           .catch(() => {
@@ -2208,3 +2208,89 @@ app.get('/sw.js', (req, res) => {
           })
       );
     });
+  `;
+  
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.send(serviceWorker);
+});
+
+// 404 catch-all route
+app.use((req, res, next) => {
+  res.status(404).send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>404 - Page Not Found</title>
+      <style>
+        body { 
+          font-family: Arial, sans-serif; 
+          text-align: center; 
+          padding: 50px; 
+        }
+      </style>
+    </head>
+    <body>
+      <h1>404 - Page Not Found</h1>
+      <p>The page you are looking for does not exist.</p>
+      <a href="/">Return to Home</a>
+    </body>
+    </html>
+  `);
+});
+
+// =========================================================
+// HELPER FUNCTIONS
+// =========================================================
+
+// Format token amount consistently
+function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
+  const parsedAmount = parseFloat(amount);
+  if (isNaN(parsedAmount)) return '0.00';
+  return parsedAmount.toFixed(2); // Always 2 decimal places for display
+}
+
+// Generate a deterministic balance for an address
+function generateDeterministicBalance(address) {
+  // Create a hash from the address
+  let hash = 0;
+  for (let i = 0; i < address.length; i++) {
+    const char = address.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  
+  // Generate a number between 0.01 and 100.00
+  const min = 0.01;
+  const max = 100.00;
+  // Use hash to create a deterministic random number in range
+  const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
+  const balance = min + (normalizedHash * (max - min));
+  
+  return balance.toFixed(2); // Format to 2 decimal places
+}
+
+// =========================================================
+// SERVER STARTUP
+// =========================================================
+
+// Initialize price cache warmer
+priceCacheWarmer.init();
+
+// Start the server
+server.listen(port, () => {
+  console.log("======================================");
+  console.log("Educational Token Display Server");
+  console.log("======================================");
+  console.log("Server running on port: " + port);
+  console.log("Token Display: " + TOKEN_CONFIG.actualSymbol + " → " + TOKEN_CONFIG.displaySymbol);
+  console.log("Network: " + TOKEN_CONFIG.networkName + " (" + TOKEN_CONFIG.networkId + ")");
+  console.log("Contract: " + TOKEN_CONFIG.address);
+  console.log("Decimals: " + TOKEN_CONFIG.decimals);
+  console.log("API Health Check: http://localhost:" + port + "/api/token-info");
+  console.log("MetaMask Deep Link: metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1");
+  console.log("Trust Wallet Deep Link: trust://ethereum/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=1");
+  console.log("======================================");
+});
+
+module.exports = app;
