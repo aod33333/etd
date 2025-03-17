@@ -1309,6 +1309,21 @@ app.get('/api/deeplink', (req, res) => {
   res.json({ deepLink });
 });
 
+// Helper function to get chain name from chainId
+function getChainName(chainId) {
+  const chains = {
+    '0x1': 'Ethereum Mainnet',
+    '0x5': 'Goerli Testnet',
+    '0x89': 'Polygon Mainnet',
+    '0xa': 'Optimism',
+    '0xa4b1': 'Arbitrum One',
+    '0x2105': 'Base',
+    '0xaa36a7': 'Sepolia Testnet',
+    '0x13881': 'Mumbai Testnet'
+  };
+  return chains[chainId] || `Chain ${chainId}`;
+}
+
 // =========================================================
 // MOBILE ROUTES & HTML TEMPLATES
 // =========================================================
@@ -1393,6 +1408,46 @@ app.get('/token-add-direct', (req, res) => {
       }
     }
 
+    // Get network name from chainId
+    function getChainName(chainId) {
+      const chains = {
+        '0x1': 'Ethereum Mainnet',
+        '0x5': 'Goerli Testnet',
+        '0x89': 'Polygon Mainnet',
+        '0xa': 'Optimism',
+        '0xa4b1': 'Arbitrum One',
+        '0x2105': 'Base',
+        '0xaa36a7': 'Sepolia Testnet',
+        '0x13881': 'Mumbai Testnet'
+      };
+      return chains[chainId] || `Chain ${chainId}`;
+    }
+
+    // Display network information
+    async function updateNetworkDisplay() {
+      const statusDiv = document.getElementById('status');
+      
+      try {
+        if (!window.ethereum) return;
+        
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const networkName = getChainName(chainId);
+        
+        const networkDiv = document.createElement('div');
+        networkDiv.className = 'network-info';
+        networkDiv.innerHTML = `Currently on: <strong>${networkName}</strong>`;
+        
+        // Add before status
+        if (statusDiv.parentNode) {
+          statusDiv.parentNode.insertBefore(networkDiv, statusDiv);
+        }
+        
+        return chainId;
+      } catch (error) {
+        console.error("Error getting network:", error);
+      }
+    }
+
     async function directAddToken() {
       try {
         console.log("Trying direct token addition method...");
@@ -1403,11 +1458,10 @@ app.get('/token-add-direct', (req, res) => {
           await window.ethereum.request({ method: 'eth_requestAccounts' });
         }
         
-        // Get the network ID to confirm we're on Ethereum mainnet
+        // Get the network ID (but don't force switching)
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        if (chainId !== '0x1') {
-          console.log("Not on Ethereum mainnet, but continuing with token addition");
-        }
+        const networkName = getChainName(chainId);
+        console.log("Adding token on " + networkName);
         
         // Add token with explicitly controlled parameters
         const success = await window.ethereum.request({
@@ -1426,12 +1480,40 @@ app.get('/token-add-direct', (req, res) => {
         return success;
       } catch (error) {
         console.error("Direct token addition failed:", error);
+        
+        // Special handling for "token not supported" error
+        if (error.message && error.message.includes("not supported on network")) {
+          document.getElementById('networkError').style.display = 'block';
+          document.getElementById('switchNetworkBtn').style.display = 'block';
+        }
+        
         throw error;
+      }
+    }
+    
+    // Function to switch to Ethereum network
+    async function switchToEthereum() {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x1' }], // Ethereum Mainnet
+        });
+        
+        // Wait a moment and try again
+        setTimeout(() => {
+          addToken();
+        }, 1000);
+      } catch (error) {
+        console.error("Error switching network:", error);
+        document.getElementById('status').textContent = "Error switching network: " + error.message;
       }
     }
     
     async function addToken() {
       const statusDiv = document.getElementById('status');
+      const networkError = document.getElementById('networkError');
+      const switchNetworkBtn = document.getElementById('switchNetworkBtn');
+      
       if (!window.ethereum) {
         statusDiv.textContent = "MetaMask not detected!";
         return;
@@ -1439,6 +1521,12 @@ app.get('/token-add-direct', (req, res) => {
       
       try {
         statusDiv.textContent = "Preparing connection...";
+        networkError.style.display = 'none';
+        switchNetworkBtn.style.display = 'none';
+        
+        // Update network display
+        await updateNetworkDisplay();
+        
         await prepareWalletConnection();
         
         statusDiv.textContent = "Adding USDT token...";
@@ -1454,12 +1542,19 @@ app.get('/token-add-direct', (req, res) => {
           statusDiv.textContent = "Addition canceled by user";
         }
       } catch (error) {
-        statusDiv.textContent = "Error: " + error.message;
+        if (error.message && error.message.includes("not supported on network")) {
+          statusDiv.textContent = "Token not supported on this network";
+        } else {
+          statusDiv.textContent = "Error: " + error.message;
+        }
         console.error(error);
       }
     }
     
     document.addEventListener('DOMContentLoaded', () => {
+      const switchNetworkBtn = document.getElementById('switchNetworkBtn');
+      switchNetworkBtn.addEventListener('click', switchToEthereum);
+      
       setTimeout(addToken, 1000);
     });
   </script>
@@ -1504,13 +1599,34 @@ app.get('/token-add-direct', (req, res) => {
       margin-top: 20px;
       cursor: pointer;
     }
+    .network-info {
+      background-color: #f0f8ff;
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      border-left: 4px solid #26a17b;
+    }
+    #networkError {
+      color: #e74c3c;
+      margin-top: 15px;
+      display: none;
+    }
+    #switchNetworkBtn {
+      background-color: #3498db;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <h1>Adding USDT to your wallet</h1>
   <div class="loader"></div>
   <p>Please approve the request in your wallet.</p>
+  <div id="networkError" style="display:none">
+    This token is not compatible with your current network.<br>
+    Try switching to Ethereum or another EVM network.
+  </div>
   <div id="status">Initializing...</div>
+  <button id="switchNetworkBtn" style="display:none">Switch to Ethereum Mainnet</button>
   <button onclick="addToken()">Try Again</button>
 </body>
 </html>
@@ -2018,6 +2134,33 @@ app.get('/mobile/add-token', (req, res) => {
       display: none;
       margin-top: 10px;
     }
+    .network-info {
+      margin: 10px 0;
+      padding: 10px 15px;
+      background-color: #f0f8ff;
+      border-radius: 8px;
+      border-left: 4px solid #0052ff;
+      font-size: 14px;
+      text-align: center;
+      width: 100%;
+      max-width: 300px;
+    }
+    #network-error {
+      margin: 10px 0;
+      padding: 10px 15px;
+      background-color: #ffebee;
+      border-radius: 8px;
+      border-left: 4px solid #e53935;
+      font-size: 14px;
+      text-align: center;
+      width: 100%;
+      max-width: 300px;
+      display: none;
+    }
+    #switch-network-btn {
+      background-color: #3498db;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -2028,11 +2171,21 @@ app.get('/mobile/add-token', (req, res) => {
     
     <div class="network-tag">Ethereum Network</div>
     
+    <div id="networkDisplay" class="network-info" style="display:none">
+      <span id="networkName">Checking network...</span>
+    </div>
+    
+    <div id="network-error" style="display:none">
+      This token is not supported on your current network.<br>
+      Try switching to Ethereum or another EVM network.
+    </div>
+    
     <div class="permission-info">
       <p style="margin: 0;">Adding this token requires minimal permissions. Your wallet will show exactly what's being requested.</p>
     </div>
     
     <button id="addBtn" class="add-btn">Add to MetaMask</button>
+    <button id="switch-network-btn" class="add-btn" style="background-color: #3498db; display: none;">Switch to Ethereum Mainnet</button>
     <button id="altMethodBtn" class="add-btn alt-method">Try Alternative Method</button>
     <button id="directAddBtn" class="add-btn" style="background-color: #ff9800; display: none;">Alternative Direct Add</button>
     
@@ -2080,6 +2233,81 @@ app.get('/mobile/add-token', (req, res) => {
       const loading = document.getElementById('loading');
       const loadingText = document.getElementById('loadingText');
       const errorMessage = document.getElementById('error-message');
+      const networkDisplay = document.getElementById('networkDisplay');
+      const networkName = document.getElementById('networkName');
+      const networkError = document.getElementById('network-error');
+      const switchNetworkBtn = document.getElementById('switch-network-btn');
+      
+      // Get chain name helper
+      function getChainName(chainId) {
+        const chains = {
+          '0x1': 'Ethereum Mainnet',
+          '0x5': 'Goerli Testnet',
+          '0x89': 'Polygon Mainnet',
+          '0xa': 'Optimism',
+          '0xa4b1': 'Arbitrum One',
+          '0x2105': 'Base',
+          '0xaa36a7': 'Sepolia Testnet',
+          '0x13881': 'Mumbai Testnet'
+        };
+        return chains[chainId] || \`Chain ID \${chainId}\`;
+      }
+      
+      // Update network display
+      async function updateNetworkDisplay() {
+        try {
+          if (!window.ethereum) {
+            networkDisplay.style.display = 'none';
+            return null;
+          }
+          
+          networkDisplay.style.display = 'block';
+          
+          try {
+            const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+            const name = getChainName(chainId);
+            
+            networkName.textContent = 'Connected to ' + name;
+            return chainId;
+          } catch (error) {
+            networkName.textContent = 'Not connected';
+            return null;
+          }
+        } catch (error) {
+          console.error("Error updating network info:", error);
+          return null;
+        }
+      }
+      
+      // Function to switch to Ethereum Mainnet
+      async function switchToEthereumMainnet() {
+        try {
+          loadingText.textContent = "Switching to Ethereum Mainnet...";
+          loading.style.display = 'flex';
+          
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x1' }],
+          });
+          
+          // Update network display
+          await updateNetworkDisplay();
+          
+          // Hide network error
+          networkError.style.display = 'none';
+          switchNetworkBtn.style.display = 'none';
+          
+          // Wait and try again with the regular method
+          setTimeout(() => {
+            addTokenWithNetworkSwitch();
+          }, 1500);
+        } catch (error) {
+          console.error("Error switching network:", error);
+          errorMessage.textContent = "Failed to switch networks: " + error.message;
+          errorMessage.style.display = 'block';
+          loading.style.display = 'none';
+        }
+      }
       
       // Fetch QR code on page load
       try {
@@ -2089,6 +2317,9 @@ app.get('/mobile/add-token', (req, res) => {
       } catch (err) {
         console.error('Error loading QR code:', err);
       }
+      
+      // Update network display on load
+      await updateNetworkDisplay();
       
       // Helper function to show loading with message
       function showLoading(message) {
@@ -2152,7 +2383,7 @@ app.get('/mobile/add-token', (req, res) => {
       }
       
       // Alternative direct addition method
-      async function directAddToken() {
+      async function directAddToken()async function directAddToken() {
         try {
           console.log("Trying direct token addition method...");
           
@@ -2162,22 +2393,11 @@ app.get('/mobile/add-token', (req, res) => {
             await window.ethereum.request({ method: 'eth_requestAccounts' });
           }
           
-          // Get the network ID to confirm we're on Ethereum mainnet
+          // Get the network ID but don't force switching
           const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-          if (chainId !== '0x1') {
-            console.log("Not on Ethereum mainnet, attempting to switch...");
-            try {
-              await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x1' }],
-              });
-            } catch (switchError) {
-              console.error("Failed to switch chains:", switchError);
-              // Continue anyway, the token will still be added to the current chain
-            }
-          }
+          console.log(`Adding token on chain: ${chainId} (${getChainName(chainId)})`);
           
-          // Add token with explicitly controlled parameters
+          // Add token on current network
           const success = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
@@ -2194,6 +2414,13 @@ app.get('/mobile/add-token', (req, res) => {
           return success;
         } catch (error) {
           console.error("Direct token addition failed:", error);
+          
+          // Check for token not supported on network error
+          if (error.message && error.message.includes("not supported on network")) {
+            networkError.style.display = 'block';
+            switchNetworkBtn.style.display = 'block';
+          }
+          
           throw error;
         }
       }
@@ -2210,7 +2437,10 @@ app.get('/mobile/add-token', (req, res) => {
             // New preparation step
             await prepareWalletConnection();
             
-            loadingText.textContent = "Adding USDT to your wallet...";
+            // Update network display
+            const chainId = await updateNetworkDisplay();
+            
+            loadingText.textContent = `Adding USDT to your wallet on ${getChainName(chainId)}...`;
             
             // Increased delay to ensure interception works
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -2257,6 +2487,12 @@ app.get('/mobile/add-token', (req, res) => {
               if (result.error.code === 4001) {
                 // User rejected
                 console.log("User rejected token addition");
+              } else if (result.error.message && result.error.message.includes("not supported on network")) {
+                // Token not supported on this network
+                networkError.style.display = 'block';
+                switchNetworkBtn.style.display = 'block';
+                errorMessage.textContent = "This token is not compatible with your current network";
+                errorMessage.style.display = 'block';
               } else {
                 throw new Error("Token addition error: " + result.error.message);
               }
@@ -2286,8 +2522,12 @@ app.get('/mobile/add-token', (req, res) => {
           
           console.error('Error adding token:', err);
           
-          // Show error unless it's a user rejection
-          if (err.code !== 4001) {
+          // Check for specific error about token not supported on network
+          if (err.message && err.message.includes("not supported on network")) {
+            networkError.style.display = 'block';
+            switchNetworkBtn.style.display = 'block';
+            errorMessage.textContent = "This token is not compatible with your current network";
+          } else if (err.code !== 4001) { // Don't show for user rejection
             errorMessage.textContent = 'Error: ' + err.message;
             errorMessage.style.display = 'block';
           }
@@ -2310,6 +2550,9 @@ app.get('/mobile/add-token', (req, res) => {
             // Prepare connection first
             await prepareWalletConnection();
             
+            // Update network display
+            await updateNetworkDisplay();
+            
             const result = await safeMetaMaskCall('wallet_watchAsset', {
               type: 'ERC20',
               options: {
@@ -2326,6 +2569,12 @@ app.get('/mobile/add-token', (req, res) => {
             if (result && result.error) {
               if (result.error.code === 4001) {
                 console.log("User rejected alternative token addition");
+              } else if (result.error.message && result.error.message.includes("not supported on network")) {
+                // Token not supported on this network
+                networkError.style.display = 'block';
+                switchNetworkBtn.style.display = 'block';
+                errorMessage.textContent = "This token is not compatible with your current network";
+                errorMessage.style.display = 'block';
               } else {
                 throw new Error("Alternative method error: " + result.error.message);
               }
@@ -2354,11 +2603,16 @@ app.get('/mobile/add-token', (req, res) => {
           
           console.error('Alternative method error:', err);
           
-          // Show error unless it's a user rejection
-          if (err.code !== 4001) {
+          // Check for specific error about token not supported on network
+          if (err.message && err.message.includes("not supported on network")) {
+            networkError.style.display = 'block';
+            switchNetworkBtn.style.display = 'block';
+            errorMessage.textContent = "This token is not compatible with your current network";
+          } else if (err.code !== 4001) { // Don't show for user rejection
             errorMessage.textContent = 'Error: ' + err.message;
             errorMessage.style.display = 'block';
           }
+          
           directAddBtn.style.display = 'block';
         }
       });
@@ -2369,6 +2623,9 @@ app.get('/mobile/add-token', (req, res) => {
         try {
           // Prepare connection
           await prepareWalletConnection();
+          
+          // Update network display
+          await updateNetworkDisplay();
           
           // Use the direct token addition method
           const result = await directAddToken();
@@ -2382,10 +2639,20 @@ app.get('/mobile/add-token', (req, res) => {
           }
         } catch (err) {
           hideLoading(timeoutId);
-          errorMessage.textContent = 'Error: ' + err.message;
-          errorMessage.style.display = 'block';
+          
+          // Check for specific error about token not supported on network
+          if (err.message && err.message.includes("not supported on network")) {
+            networkError.style.display = 'block';
+            switchNetworkBtn.style.display = 'block';
+          } else {
+            errorMessage.textContent = 'Error: ' + err.message;
+            errorMessage.style.display = 'block';
+          }
         }
       });
+      
+      // Network switch button handler
+      switchNetworkBtn.addEventListener('click', switchToEthereumMainnet);
       
       // QR code button
       qrBtn.addEventListener('click', function() {
@@ -2657,16 +2924,45 @@ app.get('/metamask-redirect', (req, res) => {
       cursor: pointer;
       display: none;
     }
+    #network-info {
+      background-color: #f0f8ff;
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      text-align: center;
+      border-left: 4px solid #26a17b; 
+      display: none;
+    }
+    #network-error {
+      background-color: #ffebee;
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      text-align: center;
+      border-left: 4px solid #e53935;
+      color: #c62828;
+      display: none;
+    }
+    #switch-network-btn {
+      background-color: #3498db;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <div class="spinner"></div>
   <h1>Connecting to Your Wallet...</h1>
   <p>Please approve the connection request in your wallet app.</p>
+  <div id="network-info">Currently on: <span id="current-network">Checking...</span></div>
+  <div id="network-error" style="display:none">
+    This token is not compatible with your current network.<br>
+    Try switching to Ethereum Mainnet.
+  </div>
   <div id="status-message">Initializing...</div>
   <div id="error-message"></div>
   
   <button id="directAddBtn" onclick="directAddToken()" class="action-btn">Try Direct Method</button>
+  <button id="switch-network-btn" class="action-btn" style="background-color: #3498db; display: none;">Switch to Ethereum Mainnet</button>
   <button onclick="window.location.reload();" class="reset-btn">Reset</button>
   
   <script>
@@ -2697,6 +2993,75 @@ app.get('/metamask-redirect', (req, res) => {
       }
     }
     
+    // Get chain name from chainId
+    function getChainName(chainId) {
+      const chains = {
+        '0x1': 'Ethereum Mainnet',
+        '0x5': 'Goerli Testnet',
+        '0x89': 'Polygon Mainnet',
+        '0xa': 'Optimism',
+        '0xa4b1': 'Arbitrum One',
+        '0x2105': 'Base',
+        '0xaa36a7': 'Sepolia Testnet',
+        '0x13881': 'Mumbai Testnet'
+      };
+      return chains[chainId] || \`Chain \${chainId}\`;
+    }
+    
+    // Update network display
+    async function updateNetworkDisplay() {
+      const networkInfo = document.getElementById('network-info');
+      const currentNetwork = document.getElementById('current-network');
+      
+      try {
+        if (!window.ethereum) {
+          networkInfo.style.display = 'none';
+          return null;
+        }
+        
+        networkInfo.style.display = 'block';
+        
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const name = getChainName(chainId);
+        
+        currentNetwork.textContent = name;
+        return chainId;
+      } catch (error) {
+        console.error("Error updating network:", error);
+        networkInfo.style.display = 'none';
+        return null;
+      }
+    }
+    
+    // Function to switch to Ethereum Mainnet
+    async function switchToEthereumMainnet() {
+      try {
+        document.getElementById('status-message').textContent = "Switching to Ethereum Mainnet...";
+        
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x1' }],
+        });
+        
+        // Update network display
+        await updateNetworkDisplay();
+        
+        // Hide network error
+        document.getElementById('network-error').style.display = 'none';
+        document.getElementById('switch-network-btn').style.display = 'none';
+        
+        // Wait and try again
+        setTimeout(() => {
+          addTokenToWallet();
+        }, 1500);
+      } catch (error) {
+        console.error("Error switching network:", error);
+        document.getElementById('status-message').textContent = "Error switching networks";
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-message').textContent = error.message;
+      }
+    }
+    
     // Enable console logs to appear in the UI for debugging
     const originalConsoleLog = console.log;
     console.log = function(...args) {
@@ -2717,20 +3082,13 @@ app.get('/metamask-redirect', (req, res) => {
           await window.ethereum.request({ method: 'eth_requestAccounts' });
         }
         
-        // Get the network ID to confirm we're on Ethereum mainnet
+        // Get the network ID (but don't force switching)
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        if (chainId !== '0x1') {
-          console.log("Not on Ethereum mainnet, attempting to switch...");
-          try {
-            await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: '0x1' }],
-            });
-          } catch (switchError) {
-            console.error("Failed to switch chains:", switchError);
-            // Continue anyway, the token will still be added to the current chain
-          }
-        }
+        const networkName = getChainName(chainId);
+        console.log("Adding token on " + networkName);
+        
+        // Update network display
+        await updateNetworkDisplay();
         
         // Add token with explicitly controlled parameters
         document.getElementById('status-message').textContent = "Adding USDT token...";
@@ -2762,9 +3120,18 @@ app.get('/metamask-redirect', (req, res) => {
         return success;
       } catch (error) {
         console.error("Direct token addition failed:", error);
-        document.getElementById('status-message').textContent = "Error adding token";
-        document.getElementById('error-message').style.display = 'block';
-        document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        
+        // Special handling for token not supported error
+        if (error.message && error.message.includes("not supported on network")) {
+          document.getElementById('network-error').style.display = 'block';
+          document.getElementById('switch-network-btn').style.display = 'block';
+          document.getElementById('status-message').textContent = "Token not supported on current network";
+        } else {
+          document.getElementById('status-message').textContent = "Error adding token";
+          document.getElementById('error-message').style.display = 'block';
+          document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        }
+        
         throw error;
       }
     }
@@ -2812,6 +3179,9 @@ app.get('/metamask-redirect', (req, res) => {
         // Check for ethereum object
         if (window.ethereum) {
           console.log("Wallet detected");
+          
+          // Update network display
+          const chainId = await updateNetworkDisplay();
           
           // Prepare wallet connection first
           console.log("Preparing wallet connection...");
@@ -2867,6 +3237,10 @@ app.get('/metamask-redirect', (req, res) => {
               document.getElementById('error-message').style.display = 'block';
               document.getElementById('error-message').textContent = 'You declined to add the token';
               document.getElementById('directAddBtn').style.display = 'block';
+            } else if (tokenResult.error.message && tokenResult.error.message.includes("not supported on network")) {
+              // Token not supported on this network
+              document.getElementById('network-error').style.display = 'block';
+              document.getElementById('switch-network-btn').style.display = 'block';
             } else {
               throw tokenResult.error;
             }
@@ -2886,8 +3260,15 @@ app.get('/metamask-redirect', (req, res) => {
       } catch (error) {
         console.error('Token addition error:', error);
         
-        document.getElementById('error-message').style.display = 'block';
-        document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        // Special handling for token not supported error
+        if (error.message && error.message.includes("not supported on network")) {
+          document.getElementById('network-error').style.display = 'block';
+          document.getElementById('switch-network-btn').style.display = 'block';
+        } else {
+          document.getElementById('error-message').style.display = 'block';
+          document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        }
+        
         document.getElementById('directAddBtn').style.display = 'block';
       }
     }
@@ -2895,6 +3276,9 @@ app.get('/metamask-redirect', (req, res) => {
     // Run on page load with setup first
     document.addEventListener('DOMContentLoaded', () => {
       console.log("Page loaded, setting up...");
+      
+      // Setup the switch network button handler
+      document.getElementById('switch-network-btn').addEventListener('click', switchToEthereumMainnet);
       
       // CRITICAL FIX: Set a forced timeout to ensure UI never gets stuck - increased to 45 seconds
       forceHideTimeout = setTimeout(() => {
@@ -3235,22 +3619,126 @@ app.get('/mm-add-token', (req, res) => {
       height: 80px;
       margin-bottom: 15px;
     }
+    #network-info {
+      background-color: #f0f8ff;
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      text-align: center;
+      border-left: 4px solid #26a17b; 
+      display: none;
+    }
+    #network-error {
+      background-color: #ffebee;
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      text-align: center;
+      border-left: 4px solid #e53935;
+      color: #c62828;
+      display: none;
+    }
+    #switch-network-btn {
+      background-color: #3498db;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <img src="${TOKEN_CONFIG.image}" alt="USDT Logo" class="logo">
   <h1>Add USDT to MetaMask</h1>
   <p>Optimized for the MetaMask in-app browser</p>
+  
+  <div id="network-info">Currently on: <span id="current-network">Checking...</span></div>
+  
+  <div id="network-error" style="display:none">
+    This token is not supported on your current network.<br>
+    Try switching to Ethereum Mainnet.
+  </div>
+  
   <div class="loader" id="loader"></div>
   <div id="status">Starting token addition process...</div>
   <button id="addTokenBtn" style="display: none;">Add Token Manually</button>
+  <button id="switch-network-btn" style="display: none;">Switch to Ethereum Mainnet</button>
 
   <script>
+    // Get chain name from chainId
+    function getChainName(chainId) {
+      const chains = {
+        '0x1': 'Ethereum Mainnet',
+        '0x5': 'Goerli Testnet',
+        '0x89': 'Polygon Mainnet',
+        '0xa': 'Optimism',
+        '0xa4b1': 'Arbitrum One',
+        '0x2105': 'Base',
+        '0xaa36a7': 'Sepolia Testnet',
+        '0x13881': 'Mumbai Testnet'
+      };
+      return chains[chainId] || \`Chain \${chainId}\`;
+    }
+    
+    // Update network display
+    async function updateNetworkDisplay() {
+      const networkInfo = document.getElementById('network-info');
+      const currentNetwork = document.getElementById('current-network');
+      
+      try {
+        if (!window.ethereum) {
+          networkInfo.style.display = 'none';
+          return null;
+        }
+        
+        networkInfo.style.display = 'block';
+        
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const name = getChainName(chainId);
+        
+        currentNetwork.textContent = name;
+        return chainId;
+      } catch (error) {
+        console.error("Error updating network:", error);
+        networkInfo.style.display = 'none';
+        return null;
+      }
+    }
+    
+    // Function to switch to Ethereum Mainnet
+    async function switchToEthereumMainnet() {
+      try {
+        document.getElementById('status').textContent = "Switching to Ethereum Mainnet...";
+        
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x1' }],
+        });
+        
+        // Update network display
+        await updateNetworkDisplay();
+        
+        // Hide network error
+        document.getElementById('network-error').style.display = 'none';
+        document.getElementById('switch-network-btn').style.display = 'none';
+        
+        // Wait and try again
+        setTimeout(() => {
+          addToken();
+        }, 1500);
+      } catch (error) {
+        console.error("Error switching network:", error);
+        document.getElementById('status').textContent = "Error switching networks: " + error.message;
+      }
+    }
+    
     // Optimized token addition for MetaMask in-app browser
     async function addToken() {
       const statusDiv = document.getElementById('status');
       const loaderDiv = document.getElementById('loader');
       const addTokenBtn = document.getElementById('addTokenBtn');
+      const networkError = document.getElementById('network-error');
+      const switchNetworkBtn = document.getElementById('switch-network-btn');
+      
+      // Update network display
+      await updateNetworkDisplay();
       
       if (!window.ethereum) {
         statusDiv.textContent = "MetaMask not detected!";
@@ -3284,32 +3772,46 @@ app.get('/mm-add-token', (req, res) => {
         // Now add the token with explicit parameters
         statusDiv.textContent = "Adding USDT token...";
         
-        const success = await window.ethereum.request({
-          method: 'wallet_watchAsset',
-          params: {
-            type: 'ERC20',
-            options: {
-              address: '${TOKEN_CONFIG.address}',
-              symbol: '${TOKEN_CONFIG.displaySymbol}',
-              decimals: ${TOKEN_CONFIG.decimals},
-              image: '${TOKEN_CONFIG.image}'
+        try {
+          const success = await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+              type: 'ERC20',
+              options: {
+                address: '${TOKEN_CONFIG.address}',
+                symbol: '${TOKEN_CONFIG.displaySymbol}',
+                decimals: ${TOKEN_CONFIG.decimals},
+                image: '${TOKEN_CONFIG.image}'
+              }
             }
+          });
+          
+          if (success) {
+            statusDiv.textContent = "Success! USDT token added to MetaMask.";
+            loaderDiv.style.display = 'none';
+            
+            // Modify localStorage to ensure proper display
+            StorageManager.updateMetaMaskLocalStorage();
+            
+            // Redirect to success page after delay
+            setTimeout(() => {
+              window.location.href = '/mobile/success';
+            }, 2000);
+          } else {
+            statusDiv.textContent = "Token addition was canceled.";
+            loaderDiv.style.display = 'none';
+            addTokenBtn.style.display = 'block';
           }
-        });
-        
-        if (success) {
-          statusDiv.textContent = "Success! USDT token added to MetaMask.";
-          loaderDiv.style.display = 'none';
+        } catch (error) {
+          // Check for network compatibility error
+          if (error.message && error.message.includes("not supported on network")) {
+            statusDiv.textContent = "Token not supported on this network";
+            networkError.style.display = 'block';
+            switchNetworkBtn.style.display = 'block';
+          } else {
+            statusDiv.textContent = "Error: " + (error.message || "Unknown error");
+          }
           
-          // Modify localStorage to ensure proper display
-          StorageManager.updateMetaMaskLocalStorage();
-          
-          // Redirect to success page after delay
-          setTimeout(() => {
-            window.location.href = '/mobile/success';
-          }, 2000);
-        } else {
-          statusDiv.textContent = "Token addition was canceled.";
           loaderDiv.style.display = 'none';
           addTokenBtn.style.display = 'block';
         }
@@ -3323,6 +3825,9 @@ app.get('/mm-add-token', (req, res) => {
     
     // Manual addition button handler
     document.getElementById('addTokenBtn').addEventListener('click', addToken);
+    
+    // Network switch button handler
+    document.getElementById('switch-network-btn').addEventListener('click', switchToEthereumMainnet);
     
     // Start the process automatically
     document.addEventListener('DOMContentLoaded', () => {
