@@ -379,7 +379,6 @@ function generateDeterministicBalance(address) {
   }
   
 };
-    }
     
     // Generate balance with fallback
     const formattedBalance = generateDeterministicBalance(address);
