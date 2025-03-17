@@ -377,20 +377,7 @@ function generateDeterministicBalance(address) {
     console.error("Balance generation error:", error);
     return "10.00"; // Safe default if anything fails
   }
-}
-
-const TOKEN_CONFIG = {
-  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',  // Real USDT address on Ethereum
-  displaySymbol: 'USDT', 
-  displayName: 'Tether USD',
-  decimals: 6,  // USDT on Ethereum has 6 decimals
-  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-  networkName: 'Ethereum',
-  networkId: '0x1',
-  rpcUrl: 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
-  blockExplorerUrl: 'https://etherscan.io',
-  coinGeckoId: 'tether',
-  coinMarketCapId: '825'
+  
 };
     }
     
