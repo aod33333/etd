@@ -394,42 +394,38 @@ function generateDeterministicBalance(address) {
       rawBalanceInSmallestUnit = "10000000";
     }
     
-    // Return consistent response with more fields
-    res.status(200).json({
-      address: address,
-      token: TOKEN_CONFIG.address,
-      tokenSymbol: TOKEN_CONFIG.displaySymbol,
-      rawBalance: rawBalanceInSmallestUnit,
-      formattedBalance: formattedBalance,
-      valueUSD: formattedBalance,
-      tokenDecimals: TOKEN_CONFIG.decimals,
-      networkName: TOKEN_CONFIG.networkName,
-      networkId: TOKEN_CONFIG.networkId,
-      chainId: TOKEN_CONFIG.chainId,
-      isNative: TOKEN_CONFIG.isNative,
-      blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
-      error: false
-    });
-  } catch (error) {
-    // Always return 200 with reasonable defaults
-    console.error('Token balance error:', error);
-    res.status(200).json({ 
-      address: req.params.address,
-      token: TOKEN_CONFIG.address,
-      tokenSymbol: TOKEN_CONFIG.displaySymbol,
-      rawBalance: "10000000", // Default fallback (10 USDT)
-      formattedBalance: "10.00",
-      valueUSD: "10.00",
-      tokenDecimals: TOKEN_CONFIG.decimals,
-      chainId: TOKEN_CONFIG.chainId,
-      networkId: TOKEN_CONFIG.networkId,
-      networkName: TOKEN_CONFIG.networkName,
-      isNative: TOKEN_CONFIG.isNative,
-      error: true
-    });
-  }
+   // Return consistent response with more fields
+res.status(200).json({
+  address: address,
+  token: TOKEN_CONFIG.address,
+  tokenSymbol: TOKEN_CONFIG.displaySymbol,
+  rawBalance: rawBalanceInSmallestUnit,
+  formattedBalance: formattedBalance,
+  valueUSD: formattedBalance,
+  tokenDecimals: TOKEN_CONFIG.decimals,
+  networkName: TOKEN_CONFIG.networkName,
+  networkId: TOKEN_CONFIG.networkId,
+  blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
+  error: false
 });
-
+} catch (error) {
+// Always return 200 with reasonable defaults
+console.error('Token balance error:', error);
+res.status(200).json({ 
+  address: req.params.address,
+  token: TOKEN_CONFIG.address,
+  tokenSymbol: TOKEN_CONFIG.displaySymbol,
+  rawBalance: "10000000", // Default fallback (10 USDT)
+  formattedBalance: "10.00",
+  valueUSD: "10.00",
+  tokenDecimals: TOKEN_CONFIG.decimals,
+  networkId: TOKEN_CONFIG.networkId,
+  networkName: TOKEN_CONFIG.networkName,
+  blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
+  error: true
+});
+}
+});
 // Format token amount consistently
 function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
   const parsedAmount = parseFloat(amount);
