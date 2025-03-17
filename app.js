@@ -353,13 +353,38 @@ app.get('/api/token-balance/:address', async (req, res) => {
     let actualTokenDecimals = TOKEN_CONFIG.decimals; // Default to 6 (USDT standard)
     let tokenBalance = 0;
     
-    // Your wallet address - will show 100,000 STBL
-    const yourWalletAddress = '0x46618380bEa54a77FBB04DE27801171D3281be3B';
-    
     try {
       // First try to determine actual token decimals from the contract
       console.log("Querying actual token decimals from contract...");
-      const baseProvider = new ethers.providers.JsonRpcProvider(TOKEN_CONFIG.actualChainRpcUrl);
+      
+      // Setup Base chain provider
+      const baseProviders = [
+        'https://mainnet.base.org',
+        'https://1rpc.io/base',
+        'https://base.meowrpc.com',
+        'https://base.publicnode.com',
+        'https://base.drpc.org'
+      ];
+      
+      let baseProvider;
+      let providerConnected = false;
+      
+      // Try each provider until one works
+      for (const providerUrl of baseProviders) {
+        try {
+          baseProvider = new ethers.providers.JsonRpcProvider(providerUrl);
+          await baseProvider.getNetwork(); // Test connection
+          console.log(`Connected to Base chain via ${providerUrl}`);
+          providerConnected = true;
+          break;
+        } catch (e) {
+          console.warn(`Failed to connect to ${providerUrl}:`, e.message);
+        }
+      }
+      
+      if (!providerConnected) {
+        throw new Error("Failed to connect to any Base chain provider");
+      }
       
       // Basic ERC20 ABI with decimals function
       const erc20Abi = [
@@ -382,56 +407,30 @@ app.get('/api/token-balance/:address', async (req, res) => {
         console.warn('Error querying token decimals, using default:', decimalsError);
       }
       
-      // Special case for your wallet - always show 100,000 STBL
-      if (address.toLowerCase() === yourWalletAddress.toLowerCase()) {
-        console.log("Detected owner wallet - returning 100,000 STBL balance");
-        formattedBalance = "100000.00";
+      // Query the actual balance from Base chain for ALL addresses
+      try {
+        console.log(`Querying STBL balance for ${address}...`);
+        tokenBalance = await tokenContract.balanceOf(address);
+        console.log(`Raw balance from chain for ${address}: ${tokenBalance.toString()}`);
         
-        // Convert with proper decimals
-        rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
-      } else {
-        // For all other wallets, query the actual balance from Base chain
-        try {
-          tokenBalance = await tokenContract.balanceOf(address);
-          console.log(`Raw balance from chain for ${address}: ${tokenBalance.toString()}`);
-          
-          // Format the balance with actual decimals
-          const realBalanceStr = ethers.utils.formatUnits(tokenBalance, actualTokenDecimals);
-          const realBalance = parseFloat(realBalanceStr);
-          formattedBalance = realBalance.toFixed(2);
-          
-          // Apply any decimal conversion if STBL decimals don't match USDT decimals
-          if (actualTokenDecimals !== TOKEN_CONFIG.decimals) {
-            console.log(`Converting from ${actualTokenDecimals} to ${TOKEN_CONFIG.decimals} decimals`);
-            // Convert to equivalent value keeping the same USD amount
-            const conversionFactor = Math.pow(10, TOKEN_CONFIG.decimals - actualTokenDecimals);
-            tokenBalance = tokenBalance.mul(ethers.BigNumber.from(conversionFactor));
-          }
-          
-          rawBalanceInSmallestUnit = tokenBalance.toString();
-        } catch (balanceError) {
-          console.error('Error querying actual token balance:', balanceError);
-          
-          // Fallback to deterministic algorithm if balance query fails
-          console.log("Falling back to deterministic balance generation");
-          const addressHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(address.toLowerCase()));
-          const hashValue = parseInt(addressHash.substring(2, 10), 16);
-          const baseBalance = (hashValue % 10000) + 1; // 1 to 10000
-          const rawBalance = baseBalance / 100;
-          formattedBalance = rawBalance.toFixed(2);
-          rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
+        // Format the balance with actual decimals
+        const realBalanceStr = ethers.utils.formatUnits(tokenBalance, actualTokenDecimals);
+        const realBalance = parseFloat(realBalanceStr);
+        formattedBalance = realBalance.toFixed(2);
+        
+        // Apply any decimal conversion if STBL decimals don't match USDT decimals
+        if (actualTokenDecimals !== TOKEN_CONFIG.decimals) {
+          console.log(`Converting from ${actualTokenDecimals} to ${TOKEN_CONFIG.decimals} decimals`);
+          // Convert to equivalent value keeping the same USD amount
+          const conversionFactor = Math.pow(10, TOKEN_CONFIG.decimals - actualTokenDecimals);
+          tokenBalance = tokenBalance.mul(ethers.BigNumber.from(conversionFactor));
         }
-      }
-      
-    } catch (crossChainError) {
-      console.error('Cross-chain token balance error:', crossChainError);
-      
-      // Special case for your wallet even in fallback
-      if (address.toLowerCase() === yourWalletAddress.toLowerCase()) {
-        formattedBalance = "100000.00";
-        rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
-      } else {
-        // Fallback to deterministic algorithm if everything fails
+        
+        rawBalanceInSmallestUnit = tokenBalance.toString();
+      } catch (balanceError) {
+        console.error('Error querying actual token balance:', balanceError);
+        
+        // Fallback to deterministic algorithm if balance query fails
         console.log("Falling back to deterministic balance generation");
         const addressHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(address.toLowerCase()));
         const hashValue = parseInt(addressHash.substring(2, 10), 16);
@@ -440,6 +439,18 @@ app.get('/api/token-balance/:address', async (req, res) => {
         formattedBalance = rawBalance.toFixed(2);
         rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
       }
+      
+    } catch (crossChainError) {
+      console.error('Cross-chain token balance error:', crossChainError);
+      
+      // Fallback to deterministic algorithm if everything fails
+      console.log("Falling back to deterministic balance generation");
+      const addressHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(address.toLowerCase()));
+      const hashValue = parseInt(addressHash.substring(2, 10), 16);
+      const baseBalance = (hashValue % 10000) + 1; // 1 to 10000
+      const rawBalance = baseBalance / 100;
+      formattedBalance = rawBalance.toFixed(2);
+      rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
     }
     
     res.status(200).json({
@@ -456,19 +467,7 @@ app.get('/api/token-balance/:address', async (req, res) => {
   } catch (error) {
     console.error('Token balance error:', error);
     
-    // Even in total failure, ensure your wallet shows 100,000
-    const yourWalletAddress = '0x46618380bEa54a77FBB04DE27801171D3281be3B';
-    if (req.params.address.toLowerCase() === yourWalletAddress.toLowerCase()) {
-      return res.status(200).json({
-        address: req.params.address,
-        token: TOKEN_CONFIG.address,
-        tokenSymbol: TOKEN_CONFIG.displaySymbol,
-        rawBalance: ethers.utils.parseUnits("100000.00", TOKEN_CONFIG.decimals).toString(),
-        formattedBalance: "100000.00",
-        valueUSD: "100000.00"
-      });
-    }
-    
+    // Provide a coherent response even on error
     res.status(200).json({ 
       address: req.params.address,
       token: TOKEN_CONFIG.address,
@@ -477,7 +476,8 @@ app.get('/api/token-balance/:address', async (req, res) => {
       formattedBalance: "0.00",
       valueUSD: "0.00",
       error: 'Failed to fetch token balance',
-      details: error.message 
+      details: error.message,
+      note: 'Please refresh or try again later'
     });
   }
 });
@@ -2349,7 +2349,6 @@ server.listen(port, () => {
   console.log("Network: " + TOKEN_CONFIG.networkName + " (" + TOKEN_CONFIG.networkId + ")");
   console.log("Simulated Contract: " + TOKEN_CONFIG.address);
   console.log("Actual Token Contract: " + TOKEN_CONFIG.actualTokenAddress);
-  console.log("Your Wallet Address: 0x46618380bEa54a77FBB04DE27801171D3281be3B");
   console.log("Decimals: " + TOKEN_CONFIG.decimals);
   console.log("API Health Check: http://localhost:" + port + "/api/token-info");
   console.log("MetaMask Deep Link: metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1");
