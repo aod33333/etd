@@ -3005,7 +3005,7 @@ app.get('/metamask-redirect', (req, res) => {
         '0xaa36a7': 'Sepolia Testnet',
         '0x13881': 'Mumbai Testnet'
       };
-      return chains[chainId] || \`Chain \${chainId}\`;
+      return chains[chainId] || `Chain ${chainId}`;
     }
     
     // Update network display
@@ -3674,7 +3674,7 @@ app.get('/mm-add-token', (req, res) => {
         '0xaa36a7': 'Sepolia Testnet',
         '0x13881': 'Mumbai Testnet'
       };
-      return chains[chainId] || \`Chain \${chainId}\`;
+      return chains[chainId] || `Chain ${chainId}`;
     }
     
     // Update network display
