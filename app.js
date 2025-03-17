@@ -120,6 +120,58 @@ function generateDeterministicBalance(address) {
   }
 }
 
+// Function to get actual token balance from the blockchain
+async function getActualTokenBalance(address) {
+  try {
+    // Validate address format
+    if (!ethers.utils.isAddress(address)) {
+      console.error("Invalid Ethereum address format:", address);
+      return null;
+    }
+    
+    // Connect to Ethereum network using the configured RPC URL
+    const provider = new ethers.providers.JsonRpcProvider(TOKEN_CONFIG.rpcUrl);
+    
+    // ERC20 ABI for balanceOf function
+    const minABI = [
+      // balanceOf
+      {
+        constant: true,
+        inputs: [{ name: '_owner', type: 'address' }],
+        name: 'balanceOf',
+        outputs: [{ name: 'balance', type: 'uint256' }],
+        type: 'function',
+      }
+    ];
+    
+    // Create contract instance
+    const tokenContract = new ethers.Contract(
+      TOKEN_CONFIG.address,
+      minABI,
+      provider
+    );
+    
+    // Call balanceOf function with timeout to prevent hanging requests
+    const balancePromise = tokenContract.balanceOf(address);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Balance request timed out")), 10000)
+    );
+    
+    // Race the promises to implement a timeout
+    const balance = await Promise.race([balancePromise, timeoutPromise]);
+    
+    // Format the balance according to token decimals
+    const formattedBalance = ethers.utils.formatUnits(balance, TOKEN_CONFIG.decimals);
+    
+    // Return with 2 decimal places for consistency with the existing app
+    return parseFloat(formattedBalance).toFixed(2);
+  } catch (error) {
+    console.error('Error fetching actual token balance:', error);
+    // Return null to allow fallback to deterministic balance
+    return null;
+  }
+}
+
 // =========================================================
 // PRICE CACHE WARMING SYSTEM
 // =========================================================
@@ -386,7 +438,7 @@ app.get('/api/generate-qr', async (req, res) => {
   }
 });
 
-// Token balance endpoint with simulated balances
+// Token balance endpoint with support for actual blockchain balances
 app.get('/api/token-balance/:address', async (req, res) => {
   try {
     const { address } = req.params;
@@ -396,8 +448,12 @@ app.get('/api/token-balance/:address', async (req, res) => {
       return res.status(400).json({ error: 'Invalid Ethereum address format' });
     }
     
-    // Generate balance with fallback
-    const formattedBalance = generateDeterministicBalance(address);
+    // Try to get the actual balance from the blockchain first
+    const actualBalance = await getActualTokenBalance(address);
+    
+    // Use actual balance if available, otherwise fall back to deterministic balance
+    const formattedBalance = actualBalance !== null ? actualBalance : generateDeterministicBalance(address);
+    
     let rawBalanceInSmallestUnit = "0";
     
     try {
@@ -422,7 +478,8 @@ app.get('/api/token-balance/:address', async (req, res) => {
       networkName: TOKEN_CONFIG.networkName,
       networkId: TOKEN_CONFIG.networkId,
       blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
-      error: false
+      error: false,
+      source: actualBalance !== null ? "blockchain" : "deterministic"  // Indicate data source
     });
   } catch (error) {
     // Always return 200 with reasonable defaults
@@ -438,7 +495,8 @@ app.get('/api/token-balance/:address', async (req, res) => {
       networkId: TOKEN_CONFIG.networkId,
       networkName: TOKEN_CONFIG.networkName,
       blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
-      error: true
+      error: true,
+      source: "fallback"
     });
   }
 });
