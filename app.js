@@ -514,23 +514,6 @@ app.get('/api/token-balance/:address', async (req, res) => {
     });
   }
 });
-  } catch (error) {
-    console.error('Token balance error:', error);
-    
-    // Provide a coherent response even on error
-    res.status(200).json({ 
-      address: req.params.address,
-      token: TOKEN_CONFIG.address,
-      tokenSymbol: TOKEN_CONFIG.displaySymbol,
-      rawBalance: "0",
-      formattedBalance: "0.00",
-      valueUSD: "0.00",
-      error: 'Failed to fetch token balance',
-      details: error.message,
-      note: 'Please refresh or try again later'
-    });
-  }
-});
 
 // =========================================================
 // COINGECKO API INTERCEPTION ENDPOINTS
