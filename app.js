@@ -17,7 +17,7 @@ const port = process.env.PORT || 3000;
 // TOKEN CONFIGURATION - ETHEREUM FOCUSED
 // =========================================================
 const TOKEN_CONFIG = {
-  address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',  // Simulated Ethereum address
+  address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',  // Simulated Ethereum address
   actualTokenAddress: '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c', // Actual STBL contract address
   actualSymbol: 'STBL',  // Actual blockchain symbol 
   displaySymbol: 'USDT', // Display symbol for UI and wallet
