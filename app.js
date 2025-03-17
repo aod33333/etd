@@ -402,11 +402,11 @@ res.status(200).json({
   rawBalance: rawBalanceInSmallestUnit,
   formattedBalance: formattedBalance,
   valueUSD: formattedBalance,
-  tokenDecimals: TOKEN_CONFIG.decimals,
-  networkName: TOKEN_CONFIG.networkName,
-  networkId: TOKEN_CONFIG.networkId,
-  blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
-  error: false
+tokenDecimals: TOKEN_CONFIG.decimals,
+networkName: TOKEN_CONFIG.networkName,
+networkId: TOKEN_CONFIG.networkId,
+blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
+error: false
 });
 } catch (error) {
 // Always return 200 with reasonable defaults
@@ -424,8 +424,7 @@ res.status(200).json({
   blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
   error: true
 });
-}
-});
+
 // Format token amount consistently
 function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
   const parsedAmount = parseFloat(amount);
