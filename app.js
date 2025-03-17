@@ -2383,7 +2383,7 @@ app.get('/mobile/add-token', (req, res) => {
       }
       
       // Alternative direct addition method
-      async function directAddToken()async function directAddToken() {
+      async function directAddToken() {
         try {
           console.log("Trying direct token addition method...");
           
