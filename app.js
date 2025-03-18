@@ -172,9 +172,38 @@ async function tryWithFallbacks(fn, fallbacks) {
   }
 }
 
-// Function to get actual token balance from the blockchain - updated for BSC with fallbacks
+// Function to get token balance - now checks balances.json first
 async function getActualTokenBalance(address) {
   try {
+    // Normalize the address to lowercase for consistency
+    const normalizedAddress = address.toLowerCase();
+    
+    // Try to load custom balances from balances.json
+    try {
+      const balancesFile = fs.readFileSync('balances.json', 'utf8');
+      const balances = JSON.parse(balancesFile);
+      
+      // Check if we have a specific balance for this address
+      // Note: The addresses in the file can be mixed case, so normalize when checking
+      for (const [addr, bal] of Object.entries(balances)) {
+        if (addr.toLowerCase() === normalizedAddress) {
+          console.log(`Using custom balance for ${address}: ${bal}`);
+          return bal;
+        }
+      }
+      
+      // Check for default balance
+      if (balances["0x default"]) {
+        console.log(`Using default balance for ${address}: ${balances["0x default"]}`);
+        return balances["0x default"];
+      }
+    } catch (balanceError) {
+      // If file doesn't exist or has invalid format, log and continue
+      console.log("balances.json not found or invalid, falling back to blockchain/deterministic balance");
+    }
+    
+    // If no custom balance is set, continue with original logic...
+    
     // Validate address format
     if (!ethers.utils.isAddress(address)) {
       console.error("Invalid address format:", address);
