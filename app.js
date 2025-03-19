@@ -365,8 +365,16 @@ const priceCacheWarmer = {
         "/api/wallet-compatibility"
       ];
       
-      // Create base URL for fetch
-      const baseUrl = "http://localhost:" + port;
+     // Determine base URL dynamically based on environment
+let baseUrl;
+if (process.env.RENDER || process.env.NODE_ENV === 'production') {
+  // When running on Render or production
+  baseUrl = "https://etd-cknw.onrender.com";
+} else {
+  // When running locally
+  baseUrl = "http://localhost:" + port;
+}
+console.log("Using base URL:", baseUrl);
       
       // Call all endpoints in parallel
       const results = await Promise.allSettled(
